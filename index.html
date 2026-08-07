@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="description" content="Ski Escape — Esquiva obstáculos, junta monedas y escapa del Yeti en este adictivo juego de esquí.">
+  <title>Ski Escape</title>
+  <!-- Google Fonts para tipografía premium -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <!-- Contenedor principal del juego -->
+  <div id="gameContainer">
+    <!-- Botones de Control Superior (Mute y Pausa) -->
+    <div class="top-controls">
+      <button id="muteBtn" class="mute-btn">🔊</button>
+      <button id="pauseBtn" class="pause-btn" style="display: none;">⏸️</button>
+    </div>
+
+    <!-- Lienzo del juego -->
+    <canvas id="gameCanvas"></canvas>
+
+    <!-- Overlay de Terror y Pánico del Yeti -->
+    <div id="yetiTerrorOverlay" class="yeti-terror-overlay"></div>
+
+    <!-- ============================================ -->
+    <!-- SPLASH SCREEN -->
+    <!-- ============================================ -->
+    <div id="splashScreen" class="overlay active">
+      <div class="splash-content">
+        <div class="splash-mountain">
+          <span class="splash-emoji">🏔️</span>
+        </div>
+        <h1 class="game-title glow-text splash-title">SKI ESCAPE</h1>
+        <div class="splash-loader-wrap">
+          <div class="splash-progress-bar">
+            <div id="splashProgressFill" class="splash-progress-fill"></div>
+          </div>
+          <p class="loading-text">Preparando la montaña<span class="loading-dots"></span></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- MENÚ PRINCIPAL -->
+    <!-- ============================================ -->
+    <div id="mainMenu" class="overlay">
+      <div class="glass-panel text-center menu-panel">
+        <!-- Header del menú -->
+        <div class="menu-header">
+          <h1 class="game-title glow-text">SKI ESCAPE</h1>
+          <p class="game-subtitle">Esquiva obstáculos y escapa del Yeti</p>
+
+          <div class="stats-container">
+            <div class="stat-box">
+              <span class="stat-icon">🏆</span>
+              <div class="stat-data">
+                <span class="stat-label">RÉCORD</span>
+                <span id="highScoreVal" class="stat-value">0m</span>
+              </div>
+            </div>
+            <div class="stat-box">
+              <span class="stat-icon">🪙</span>
+              <div class="stat-data">
+                <span class="stat-label">MONEDAS</span>
+                <span id="menuCoinsVal" class="stat-value text-gold">0</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Configuración colapsable -->
+        <div class="menu-settings">
+          <!-- Selector de Personaje -->
+          <div class="selector-group">
+            <span class="selector-label">PERSONAJE</span>
+            <div class="segmented-control">
+              <button id="charSkierBtn" class="control-btn active">🎿 Esquiador</button>
+              <button id="charBoarderBtn" class="control-btn">🏂 Snowboard</button>
+            </div>
+          </div>
+
+          <!-- Selector de Estilo Sprite -->
+          <div class="selector-group">
+            <span class="selector-label">ESTILO RETRO</span>
+            <div class="segmented-control">
+              <button id="styleBananaBtn" class="control-btn active">🍌 Plátano</button>
+              <button id="styleHumanBtn" class="control-btn">👤 Humano</button>
+            </div>
+          </div>
+
+          <!-- Selector de Dificultad -->
+          <div class="selector-group">
+            <span class="selector-label">DIFICULTAD</span>
+            <div class="segmented-control">
+              <button id="diffEasyBtn" class="control-btn">Fácil</button>
+              <button id="diffMedBtn" class="control-btn active">Medio</button>
+              <button id="diffHardBtn" class="control-btn">Difícil</button>
+            </div>
+          </div>
+
+          <!-- Selector de Yeti -->
+          <div class="selector-group">
+            <span class="selector-label">👹 YETI APARECE EN:</span>
+            <div class="segmented-control">
+              <button class="control-btn yeti-dist-btn" data-yeti="500">0.5 km</button>
+              <button class="control-btn yeti-dist-btn active" data-yeti="1500">1.5 km</button>
+              <button class="control-btn yeti-dist-btn" data-yeti="2500">2.5 km</button>
+              <button class="control-btn yeti-dist-btn" data-yeti="999999">Off</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Botones de acción (sticky al fondo) -->
+        <div class="menu-actions">
+          <button id="playBtn" class="btn btn-primary btn-glow btn-play">
+            <span>🎿 ¡JUGAR!</span>
+          </button>
+          <div class="menu-secondary-actions">
+            <button id="shopBtn" class="btn btn-reward btn-compact">
+              <span>🛒 TIENDA</span>
+            </button>
+            <button id="howToBtn" class="btn btn-secondary btn-compact">
+              <span>❓ CÓMO JUGAR</span>
+            </button>
+          </div>
+          <a href="/privacy.html" target="_blank" class="privacy-link">🔒 Política de Privacidad</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- TIENDA DE SKINS -->
+    <!-- ============================================ -->
+    <div id="shopModal" class="overlay">
+      <div class="glass-panel text-center shop-panel">
+        <div class="shop-header">
+          <h2 class="panel-title">🛒 TIENDA</h2>
+          <div class="shop-balance">
+            <span class="balance-label">Monedas</span>
+            <strong id="shopCoinsVal" class="text-gold balance-value">0 🪙</strong>
+          </div>
+        </div>
+
+        <button id="freeCoinsAdBtn" class="btn btn-reward btn-sm btn-full">
+          <span>📺 +100 Monedas Gratis (Ver Video)</span>
+        </button>
+
+        <div class="shop-grid">
+          <!-- Skin 1: Clásica -->
+          <div class="skin-card active" data-skin="default">
+            <div class="skin-icon">🎿</div>
+            <div class="skin-info">
+              <span class="skin-title">Esquiador Clásico</span>
+              <span class="skin-status">En Uso</span>
+            </div>
+            <button class="btn btn-sm btn-secondary select-skin-btn" data-skin="default">Usar</button>
+          </div>
+
+          <!-- Skin 2: Esquiador Fuego -->
+          <div class="skin-card" data-skin="fire" data-rarity="rare">
+            <div class="skin-icon">🔥</div>
+            <div class="skin-info">
+              <span class="skin-title">Fuego</span>
+              <span class="skin-price">150 🪙</span>
+            </div>
+            <button class="btn btn-sm btn-primary buy-skin-btn" data-skin="fire" data-price="150">Comprar</button>
+          </div>
+
+          <!-- Skin 3: Snowboard Cyberpunk -->
+          <div class="skin-card" data-skin="cyber" data-rarity="epic">
+            <div class="skin-icon">⚡</div>
+            <div class="skin-info">
+              <span class="skin-title">Cyberpunk</span>
+              <span class="skin-price">250 🪙</span>
+            </div>
+            <button class="btn btn-sm btn-primary buy-skin-btn" data-skin="cyber" data-price="250">Comprar</button>
+          </div>
+
+          <!-- Skin 4: Yeti Dorado -->
+          <div class="skin-card" data-skin="yeti_gold" data-rarity="legendary">
+            <div class="skin-icon">🦁</div>
+            <div class="skin-info">
+              <span class="skin-title">Yeti Dorado</span>
+              <span class="skin-price">500 🪙</span>
+            </div>
+            <button class="btn btn-sm btn-primary buy-skin-btn" data-skin="yeti_gold" data-price="500">Comprar</button>
+          </div>
+
+          <!-- Ítem 5: Escudo de Inicio -->
+          <div class="skin-card" data-skin="start_shield" data-rarity="rare">
+            <div class="skin-icon">🛡️</div>
+            <div class="skin-info">
+              <span class="skin-title">Escudo Inicial</span>
+              <span class="skin-price">300 🪙</span>
+            </div>
+            <button class="btn btn-sm btn-primary buy-skin-btn" data-skin="start_shield" data-price="300">Comprar</button>
+          </div>
+
+          <!-- Ítem 6: Súper Imán -->
+          <div class="skin-card" data-skin="super_magnet" data-rarity="epic">
+            <div class="skin-icon">🧲</div>
+            <div class="skin-info">
+              <span class="skin-title">Imán x2</span>
+              <span class="skin-price">400 🪙</span>
+            </div>
+            <button class="btn btn-sm btn-primary buy-skin-btn" data-skin="super_magnet" data-price="400">Comprar</button>
+          </div>
+        </div>
+
+        <button id="closeShopBtn" class="btn btn-secondary">
+          <span>← Volver al Menú</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- PANEL DE INSTRUCCIONES -->
+    <!-- ============================================ -->
+    <div id="instructionsPanel" class="overlay">
+      <div class="glass-panel instructions-panel">
+        <h2 class="panel-title">📖 CÓMO JUGAR</h2>
+        <div class="instructions-content">
+          <div class="instruction-step step-blue">
+            <div class="step-icon">📱</div>
+            <div class="step-text">
+              <strong>Controles Táctiles</strong>
+              <p>Toca o mantén presionado a la <strong>izquierda</strong> o <strong>derecha</strong> para girar.</p>
+            </div>
+          </div>
+          <div class="instruction-step step-gold">
+            <div class="step-icon">🪙</div>
+            <div class="step-text">
+              <strong>Monedas y Power-Ups</strong>
+              <p>Junta <strong>monedas</strong> para la tienda. Recoge 🛡️ Escudos e 🧲 Imanes.</p>
+            </div>
+          </div>
+          <div class="instruction-step step-red">
+            <div class="step-icon">👹</div>
+            <div class="step-text">
+              <strong>¡Escapa del Yeti!</strong>
+              <p>El <strong>Yeti</strong> te persigue. ¡Haz que choque contra árboles o rocas!</p>
+            </div>
+          </div>
+        </div>
+        <button id="closeInstBtn" class="btn btn-primary">
+          <span>✅ ¡Entendido!</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- HUD EN JUEGO -->
+    <!-- ============================================ -->
+    <div id="gameHUD" class="hud-container">
+      <div class="hud-bar">
+        <div class="hud-item">
+          <span class="hud-icon">⛷️</span>
+          <span id="distanceVal" class="hud-value">0m</span>
+        </div>
+        <div class="hud-divider"></div>
+        <div class="hud-item">
+          <span class="hud-icon">⚡</span>
+          <span id="speedVal" class="hud-value hud-speed">0</span>
+        </div>
+        <div class="hud-divider"></div>
+        <div class="hud-item">
+          <span class="hud-icon">🪙</span>
+          <span id="hudCoinsVal" class="hud-value text-gold">0</span>
+        </div>
+      </div>
+
+      <!-- Barra de Power-Ups Activos -->
+      <div id="powerUpBar" class="powerup-bar">
+        <div id="shieldBadge" class="powerup-badge shield-badge">🛡️ Escudo</div>
+        <div id="magnetBadge" class="powerup-badge magnet-badge">🧲 Imán (<span id="magnetTimer">6</span>s)</div>
+      </div>
+
+      <!-- Alerta de Yeti -->
+      <div id="yetiWarning" class="yeti-warning-bar">
+        <div class="warning-pulse">⚠️ YETI ACERCÁNDOSE ⚠️</div>
+        <div class="warning-distance-meter">
+          <span id="yetiDistanceLabel">El Yeti está en camino...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- GAME OVER -->
+    <!-- ============================================ -->
+    <div id="gameOverMenu" class="overlay">
+      <div class="glass-panel text-center gameover-panel">
+        <div class="gameover-header">
+          <h2 id="gameOverTitle" class="glow-text text-danger gameover-title">¡JUEGO TERMINADO!</h2>
+          <p id="gameOverReason" class="game-subtitle">¡Chocaste contra un árbol!</p>
+          <div id="newRecordBadge" class="new-record-badge" style="display:none;">
+            🏆 ¡NUEVO RÉCORD!
+          </div>
+        </div>
+
+        <div class="stats-row">
+          <div class="stat-box">
+            <span class="stat-icon">📏</span>
+            <div class="stat-data">
+              <span class="stat-label">DISTANCIA</span>
+              <span id="finalScoreVal" class="stat-value">0m</span>
+            </div>
+          </div>
+          <div class="stat-box">
+            <span class="stat-icon">🏆</span>
+            <div class="stat-data">
+              <span class="stat-label">RÉCORD</span>
+              <span id="currentRecordVal" class="stat-value">0m</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="menu-buttons">
+          <button id="reviveBtn" class="btn btn-reward btn-glow">
+            <span class="btn-icon">📺</span>
+            <span>REVIVIR (Ver Video)</span>
+          </button>
+          <button id="restartBtn" class="btn btn-primary">
+            <span>🔄 JUGAR DE NUEVO</span>
+          </button>
+          <button id="mainMenuBtn" class="btn btn-secondary">
+            <span>🏠 MENÚ PRINCIPAL</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- MENÚ DE PAUSA -->
+    <!-- ============================================ -->
+    <div id="pauseMenu" class="overlay">
+      <div class="glass-panel text-center pause-panel">
+        <div class="pause-icon-big">⏸️</div>
+        <h2 class="panel-title glow-text">PAUSA</h2>
+
+        <div class="pause-stats">
+          <div class="pause-stat">
+            <span class="pause-stat-label">Distancia</span>
+            <span id="pauseDistVal" class="pause-stat-value">0m</span>
+          </div>
+          <div class="pause-stat">
+            <span class="pause-stat-label">Monedas</span>
+            <span id="pauseCoinsVal" class="pause-stat-value text-gold">0</span>
+          </div>
+        </div>
+
+        <div class="menu-buttons">
+          <button id="resumeBtn" class="btn btn-primary btn-glow">
+            <span>▶️ CONTINUAR</span>
+          </button>
+          <button id="pauseMuteBtn" class="btn btn-secondary">
+            <span>🔊 SONIDO</span>
+          </button>
+          <button id="restartPauseBtn" class="btn btn-secondary">
+            <span>🔄 REINICIAR</span>
+          </button>
+          <button id="mainMenuPauseBtn" class="btn btn-danger">
+            <span>🏠 MENÚ PRINCIPAL</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SIMULADOR DE ANUNCIOS DE GOOGLE ADMOB -->
+    <div id="adMobSimulator" class="ad-simulator-container">
+      <div id="simulatedBannerAd" class="simulated-banner-ad">
+        <div class="sim-ad-badge">Anuncio de Google (Banner)</div>
+        <div class="sim-ad-content">🎿 ¡Compra los mejores esquís en SnowShop! 🎿</div>
+        <button id="closeSimBanner" class="sim-close-btn">&times;</button>
+      </div>
+
+      <div id="simulatedVideoAd" class="simulated-video-overlay">
+        <div class="sim-video-box">
+          <div class="sim-video-header">
+            <span id="simVideoTypeLabel">Video de AdMob (Simulado)</span>
+            <span id="simVideoTimer" class="sim-video-timer">Cargando...</span>
+          </div>
+          <div class="sim-video-body">
+            <div class="sim-video-play-icon">▶️</div>
+            <p class="sim-video-text">Disfrutando de la simulación de publicidad...</p>
+            <p class="sim-video-tip">Este video representa cómo interactúa AdMob con la app.</p>
+          </div>
+          <div class="sim-video-footer">
+            <button id="skipSimVideoBtn" class="btn btn-secondary disabled" disabled>Omitir en 5s</button>
+            <button id="claimRewardBtn" class="btn btn-reward disabled" disabled>Cerrar y Reclamar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Scripts del juego -->
+  <script type="module" src="/ads.js"></script>
+  <script type="module" src="/main.js"></script>
+</body>
+</html>
