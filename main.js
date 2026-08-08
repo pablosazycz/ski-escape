@@ -1415,9 +1415,7 @@ function render() {
     const screenY = t.y - cameraY;
     if (screenY > -50 && screenY < height + 50) {
       ctx.fillStyle = `rgba(148, 163, 184, ${t.alpha})`; // Color gris azulado suave
-      ctx.beginPath();
-      ctx.arc(t.x, screenY, t.size, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillRect(t.x - t.size, screenY - t.size, t.size * 2, t.size * 2);
     }
   });
 
@@ -1438,9 +1436,7 @@ function render() {
       ctx.save();
       ctx.globalAlpha = p.alpha;
       ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(p.x, screenY, p.size, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.fillRect(p.x - p.size, screenY - p.size, p.size * 2, p.size * 2);
       ctx.restore();
     }
   });
