@@ -237,10 +237,10 @@ function makeImageTransparent(img) {
       }
     }
     tempCtx.putImageData(imgData, 0, 0);
-    tempCanvas.complete = true;
-    tempCanvas.naturalWidth = tempCanvas.width;
-    tempCanvas.naturalHeight = tempCanvas.height;
-    return tempCanvas;
+    
+    const newImg = new Image();
+    newImg.src = tempCanvas.toDataURL('image/png');
+    return newImg;
   } catch (e) {
     console.warn("No se pudo aplicar transparencia dinámica al sprite:", e);
     return img;
@@ -2108,8 +2108,8 @@ function drawPlayer(x, y) {
       const frameWidth = imgW / 3;
       const frameHeight = imgH;
       let frameIndex = 1; // Center (Front)
-      if (turnState === 'LEFT') frameIndex = 0;
-      else if (turnState === 'RIGHT') frameIndex = 2;
+      if (turnState === 'LEFT') frameIndex = 2;
+      else if (turnState === 'RIGHT') frameIndex = 0;
 
       // Tamaño del sprite respetando la proporción real del frame (Agrandado para celular)
       const frameAspect = frameWidth / frameHeight;
@@ -2402,8 +2402,8 @@ function drawPlayer(x, y) {
       const frameWidth = imgW / 3;
       const frameHeight = imgH;
       let frameIndex = 1; // Center (Front)
-      if (turnState === 'LEFT') frameIndex = 0;
-      else if (turnState === 'RIGHT') frameIndex = 2;
+      if (turnState === 'LEFT') frameIndex = 2;
+      else if (turnState === 'RIGHT') frameIndex = 0;
 
       // Tamaño del sprite respetando la proporción real del frame (Agrandado para celular)
       const frameAspect = frameWidth / frameHeight;
