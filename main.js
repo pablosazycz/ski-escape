@@ -1699,7 +1699,7 @@ function drawObstacle(x, y, obs) {
 
       // Glow resplandeciente
       ctx.shadowColor = '#ffad00';
-      ctx.shadowBlur = 10;
+      // ctx.shadowBlur removed for perf
 
       // Anillo exterior
       ctx.fillStyle = '#d97706';
@@ -1719,7 +1719,7 @@ function drawObstacle(x, y, obs) {
       ctx.ellipse(0, -4, coinW * 0.7, obs.size * 0.35, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      ctx.shadowBlur = 0;
+      // ctx.shadowBlur removed for perf
 
       // Símbolo "$"
       if (coinScale > 0.55) {
@@ -1742,7 +1742,7 @@ function drawObstacle(x, y, obs) {
 
       // Glow holográfico cian
       ctx.shadowColor = '#00f3ff';
-      ctx.shadowBlur = 14;
+      // ctx.shadowBlur removed for perf
 
       // Orbe exterior
       ctx.fillStyle = 'rgba(0, 243, 255, 0.18)';
@@ -1760,7 +1760,7 @@ function drawObstacle(x, y, obs) {
       ctx.ellipse(0, floatY, obs.size * 0.7, obs.size * 0.25, obs.floatOffset, 0, Math.PI * 2);
       ctx.stroke();
 
-      ctx.shadowBlur = 0;
+      // ctx.shadowBlur removed for perf
 
       // Ícono de escudo
       ctx.font = '14px sans-serif';
@@ -1780,7 +1780,7 @@ function drawObstacle(x, y, obs) {
 
       // Glow púrpura
       ctx.shadowColor = '#c084fc';
-      ctx.shadowBlur = 14;
+      // ctx.shadowBlur removed for perf
 
       // Orbe exterior
       ctx.fillStyle = 'rgba(168, 85, 247, 0.18)';
@@ -1798,7 +1798,7 @@ function drawObstacle(x, y, obs) {
       ctx.ellipse(0, floatY, obs.size * 0.7, obs.size * 0.25, -obs.floatOffset, 0, Math.PI * 2);
       ctx.stroke();
 
-      ctx.shadowBlur = 0;
+      // ctx.shadowBlur removed for perf
 
       // Ícono de imán
       ctx.font = '14px sans-serif';
@@ -1827,7 +1827,7 @@ function drawObstacle(x, y, obs) {
       ctx.strokeStyle = '#00f3ff';
       ctx.lineWidth = 2;
       ctx.shadowColor = '#00f3ff';
-      ctx.shadowBlur = 8;
+      // ctx.shadowBlur removed for perf
       ctx.beginPath();
       ctx.moveTo(-obs.size * 0.6, 0);
       ctx.lineTo(-obs.size * 0.4, -obs.size * 0.35);
@@ -1836,7 +1836,7 @@ function drawObstacle(x, y, obs) {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
-      ctx.shadowBlur = 0;
+      // ctx.shadowBlur removed for perf
 
       // Borde de despegue (neón)
       ctx.strokeStyle = '#38bdf8';
@@ -1950,7 +1950,7 @@ function drawPlayer(x, y) {
     const ry = 28 + shieldPulse;
 
     ctx.shadowColor = '#00f3ff';
-    ctx.shadowBlur = 16;
+    // ctx.shadowBlur removed for perf
 
     // Relleno de energía con degradado radial
     const gradient = ctx.createRadialGradient(0, centerY, 4, 0, centerY, ry);
@@ -1987,7 +1987,7 @@ function drawPlayer(x, y) {
     ctx.fillStyle = 'rgba(234, 88, 12, 0.2)';
     ctx.lineWidth = 2.5;
     ctx.shadowColor = '#f97316';
-    ctx.shadowBlur = 14;
+    // ctx.shadowBlur removed for perf
     ctx.beginPath();
     ctx.ellipse(0, 8, 21, 27, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -1999,7 +1999,7 @@ function drawPlayer(x, y) {
     ctx.fillStyle = 'rgba(0, 243, 255, 0.2)';
     ctx.lineWidth = 2.5;
     ctx.shadowColor = '#00f3ff';
-    ctx.shadowBlur = 14;
+    // ctx.shadowBlur removed for perf
     ctx.beginPath();
     ctx.ellipse(0, 8, 21, 27, 0, 0, Math.PI * 2);
     ctx.fill();
@@ -2059,10 +2059,10 @@ function drawPlayer(x, y) {
     // Ojos rojos brillantes
     ctx.fillStyle = '#ef4444';
     ctx.shadowColor = '#ef4444';
-    ctx.shadowBlur = 6;
+    // ctx.shadowBlur removed for perf
     ctx.beginPath(); ctx.arc(-3.5, -15, 2, 0, Math.PI * 2); ctx.fill();
     ctx.beginPath(); ctx.arc(3.5, -15, 2, 0, Math.PI * 2); ctx.fill();
-    ctx.shadowBlur = 0;
+    // ctx.shadowBlur removed for perf
 
     // Pupilas
     ctx.fillStyle = '#fbbf24';
@@ -2722,12 +2722,12 @@ function drawPlayer(x, y) {
 
     // Cartel Neón "🚀 TURBO!" con glow
     ctx.shadowColor = '#00f3ff';
-    ctx.shadowBlur = 8;
+    // ctx.shadowBlur removed for perf
     ctx.fillStyle = 'rgba(0, 243, 255, 0.92)';
     ctx.beginPath();
     ctx.roundRect(-28, -34, 56, 15, 5);
     ctx.fill();
-    ctx.shadowBlur = 0;
+    // ctx.shadowBlur removed for perf
     ctx.fillStyle = '#020617';
     ctx.font = 'bold 9px "Space Grotesk", sans-serif';
     ctx.textAlign = 'center';
@@ -2771,7 +2771,7 @@ function drawYeti(x, y) {
   if (yetiImg.complete && yetiImg.naturalWidth > 0) {
     ctx.save();
     ctx.shadowColor = '#ef4444';
-    ctx.shadowBlur = 15;
+    // ctx.shadowBlur removed for perf
     ctx.beginPath();
     ctx.arc(0, -2, 32, 0, Math.PI * 2);
     ctx.clip();
@@ -2865,12 +2865,12 @@ function drawYeti(x, y) {
     // Ojos rojos brillantes
     ctx.fillStyle = '#ef4444';
     ctx.shadowColor = '#ef4444';
-    ctx.shadowBlur = 8;
+    // ctx.shadowBlur removed for perf
     ctx.beginPath();
     ctx.arc(-6, -9, 4.5, 0, Math.PI * 2);
     ctx.arc(6, -9, 4.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowBlur = 0; // Reset sombra
+    // ctx.shadowBlur removed for perf // Reset sombra
 
     // Pupilas amarillas malignas
     ctx.fillStyle = '#ffad00';
@@ -2995,7 +2995,7 @@ function updateAndDrawFloatingTexts(cameraY) {
     ctx.globalAlpha = ft.alpha;
     ctx.fillStyle = ft.color;
     ctx.shadowColor = ft.color;
-    ctx.shadowBlur = 10;
+    // ctx.shadowBlur removed for perf
     ctx.font = `bold ${ft.size}px "Space Grotesk", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
