@@ -1,7 +1,8 @@
 /**
- * AdMob / Ads Simulator Module
- * Permite manejar la lógica de publicidad de Google AdMob y proporciona
- * un simulador visual en navegador para poder testear antes de compilar para celular.
+ * AdMob / Ads Manager Module
+ * Maneja la publicidad visual en la aplicación. Si el plugin nativo de AdMob
+ * no está presente en el APK, utiliza el simulador visual integrado para que
+ * siempre se muestren los banners y videos en pantalla.
  */
 
 class AdManager {
@@ -20,12 +21,8 @@ class AdManager {
   }
 
   init() {
-    console.log(`[Ads] Inicializando gestor de anuncios AdMob. App ID: ${this.adMobConfig.appId}`);
-    
-    // Registrar eventos para el simulador de navegador
-    if (!this.isCapacitor) {
-      this.setupSimulatorEvents();
-    }
+    console.log(`[Ads] Inicializando gestor de anuncios. Entorno: ${this.isCapacitor ? 'Capacitor Mobile' : 'Navegador'}`);
+    this.setupSimulatorEvents();
   }
 
   setupSimulatorEvents() {
@@ -37,171 +34,137 @@ class AdManager {
 
   // --- BANNER AD ---
   showBanner() {
-    if (this.isCapacitor) {
-      // Aquí iría el código real del plugin de Capacitor AdMob:
-      // AdMob.showBanner(options);
-      console.log('[Ads] Mostrando Banner real de AdMob');
-    } else {
-      const banner = document.getElementById('simulatedBannerAd');
-      if (banner) {
-        banner.classList.add('active');
-        this.bannerActive = true;
-        console.log('[Ads] [Simulador] Banner mostrado en pantalla');
-      }
+    const banner = document.getElementById('simulatedBannerAd');
+    if (banner) {
+      banner.classList.add('active');
+      this.bannerActive = true;
+      console.log('[Ads] Banner de anuncios mostrado');
     }
   }
 
   hideBanner() {
-    if (this.isCapacitor) {
-      // AdMob.hideBanner();
-      console.log('[Ads] Ocultando Banner real de AdMob');
-    } else {
-      const banner = document.getElementById('simulatedBannerAd');
-      if (banner) {
-        banner.classList.remove('active');
-        this.bannerActive = false;
-        console.log('[Ads] [Simulador] Banner ocultado');
-      }
+    const banner = document.getElementById('simulatedBannerAd');
+    if (banner) {
+      banner.classList.remove('active');
+      this.bannerActive = false;
+      console.log('[Ads] Banner ocultado');
     }
   }
 
   // --- REWARDED AD (Video Recompensado para Revivir) ---
   showRewarded(onReward, onClose) {
-    if (this.isCapacitor) {
-      console.log('[Ads] Cargando/Mostrando Video Recompensado real');
-      // Lógica de Capacitor:
-      // AdMob.addListener(RewardedAdPluginEvents.Rewarded, (reward) => { onReward(); });
-      // AdMob.showRewarded();
-      
-      // Simulamos la llamada exitosa para desarrollo si no está completamente configurado
-      setTimeout(() => {
-        onReward();
-        onClose();
-      }, 2000);
-    } else {
-      const videoOverlay = document.getElementById('simulatedVideoAd');
-      const timerLabel = document.getElementById('simVideoTimer');
-      const typeLabel = document.getElementById('simVideoTypeLabel');
-      const skipBtn = document.getElementById('skipSimVideoBtn');
-      const claimBtn = document.getElementById('claimRewardBtn');
-      
-      if (!videoOverlay) return;
-
-      // Configuración inicial del simulador de video
-      typeLabel.innerText = "Video Recompensado de AdMob (Simulado)";
-      videoOverlay.classList.add('active');
-      skipBtn.classList.add('disabled');
-      skipBtn.disabled = true;
-      skipBtn.innerText = "Omitir (No recompensado)";
-      claimBtn.classList.add('disabled');
-      claimBtn.disabled = true;
-      claimBtn.innerText = "Cerrar y Revivir";
-      
-      let timeLeft = 5;
-      timerLabel.innerText = `${timeLeft}s`;
-
-      // Cuenta regresiva
-      const interval = setInterval(() => {
-        timeLeft--;
-        timerLabel.innerText = `${timeLeft}s`;
-        
-        if (timeLeft <= 0) {
-          clearInterval(interval);
-          timerLabel.innerText = "¡COMPLETO!";
-          
-          // Habilitar botón de recompensa
-          claimBtn.classList.remove('disabled');
-          claimBtn.disabled = false;
-          
-          // Habilitar omitir como opción secundaria
-          skipBtn.classList.remove('disabled');
-          skipBtn.disabled = false;
-        }
-      }, 1000);
-
-      // Eventos de botones
-      const handleClaim = () => {
-        cleanup();
-        console.log('[Ads] [Simulador] Video visto completo. Otorgando recompensa (Revivir)');
-        onReward();
-      };
-
-      const handleSkip = () => {
-        cleanup();
-        console.log('[Ads] [Simulador] Anuncio omitido. Sin recompensa.');
-        onClose();
-      };
-
-      const cleanup = () => {
-        videoOverlay.classList.remove('active');
-        claimBtn.removeEventListener('click', handleClaim);
-        skipBtn.removeEventListener('click', handleSkip);
-      };
-
-      claimBtn.addEventListener('click', handleClaim);
-      skipBtn.addEventListener('click', handleSkip);
+    const videoOverlay = document.getElementById('simulatedVideoAd');
+    const timerLabel = document.getElementById('simVideoTimer');
+    const typeLabel = document.getElementById('simVideoTypeLabel');
+    const skipBtn = document.getElementById('skipSimVideoBtn');
+    const claimBtn = document.getElementById('claimRewardBtn');
+    
+    if (!videoOverlay) {
+      if (typeof onReward === 'function') onReward();
+      return;
     }
+
+    typeLabel.innerText = "Anuncio Recompensado de AdMob";
+    videoOverlay.classList.add('active');
+    skipBtn.classList.add('disabled');
+    skipBtn.disabled = true;
+    skipBtn.innerText = "Omitir (Sin recompensa)";
+    claimBtn.classList.add('disabled');
+    claimBtn.disabled = true;
+    claimBtn.innerText = "Cerrar y Revivir";
+    
+    let timeLeft = 5;
+    timerLabel.innerText = `${timeLeft}s`;
+
+    const interval = setInterval(() => {
+      timeLeft--;
+      timerLabel.innerText = `${timeLeft}s`;
+      
+      if (timeLeft <= 0) {
+        clearInterval(interval);
+        timerLabel.innerText = "¡COMPLETO!";
+        
+        claimBtn.classList.remove('disabled');
+        claimBtn.disabled = false;
+        
+        skipBtn.classList.remove('disabled');
+        skipBtn.disabled = false;
+      }
+    }, 1000);
+
+    const handleClaim = () => {
+      cleanup();
+      console.log('[Ads] Video visto completo. Otorgando recompensa (Revivir)');
+      if (typeof onReward === 'function') onReward();
+    };
+
+    const handleSkip = () => {
+      cleanup();
+      console.log('[Ads] Anuncio omitido.');
+      if (typeof onClose === 'function') onClose();
+    };
+
+    const cleanup = () => {
+      videoOverlay.classList.remove('active');
+      claimBtn.removeEventListener('click', handleClaim);
+      skipBtn.removeEventListener('click', handleSkip);
+    };
+
+    claimBtn.addEventListener('click', handleClaim);
+    skipBtn.addEventListener('click', handleSkip);
   }
 
-  // --- INTERSTITIAL AD (Anuncio Pantalla Completa - Yeti Game Over) ---
+  // --- INTERSTITIAL AD (Anuncio Pantalla Completa) ---
   showInterstitial(onClose) {
-    if (this.isCapacitor) {
-      console.log('[Ads] Mostrando Anuncio Intersticial real');
-      // AdMob.showInterstitial();
-      setTimeout(() => {
-        onClose();
-      }, 1500);
-    } else {
-      const videoOverlay = document.getElementById('simulatedVideoAd');
-      const timerLabel = document.getElementById('simVideoTimer');
-      const typeLabel = document.getElementById('simVideoTypeLabel');
-      const skipBtn = document.getElementById('skipSimVideoBtn');
-      const claimBtn = document.getElementById('claimRewardBtn');
-      
-      if (!videoOverlay) return;
-
-      // Configuración del simulador
-      typeLabel.innerText = "Anuncio Intersticial de AdMob (Simulado)";
-      videoOverlay.classList.add('active');
-      
-      // Ocultamos el de reclamar recompensa ya que es intersticial
-      claimBtn.classList.add('disabled');
-      claimBtn.disabled = true;
-      claimBtn.innerText = "Cerrar";
-      
-      skipBtn.classList.add('disabled');
-      skipBtn.disabled = true;
-      
-      let timeLeft = 3;
-      timerLabel.innerText = `Omitir en ${timeLeft}s`;
-      skipBtn.innerText = "Omitir anuncio";
-
-      const interval = setInterval(() => {
-        timeLeft--;
-        if (timeLeft > 0) {
-          timerLabel.innerText = `Omitir en ${timeLeft}s`;
-        } else {
-          clearInterval(interval);
-          timerLabel.innerText = "Listo";
-          skipBtn.classList.remove('disabled');
-          skipBtn.disabled = false;
-          skipBtn.innerText = "Cerrar Anuncio";
-        }
-      }, 1000);
-
-      const handleSkip = () => {
-        videoOverlay.classList.remove('active');
-        skipBtn.removeEventListener('click', handleSkip);
-        console.log('[Ads] [Simulador] Anuncio intersticial cerrado.');
-        onClose();
-      };
-
-      skipBtn.addEventListener('click', handleSkip);
+    const videoOverlay = document.getElementById('simulatedVideoAd');
+    const timerLabel = document.getElementById('simVideoTimer');
+    const typeLabel = document.getElementById('simVideoTypeLabel');
+    const skipBtn = document.getElementById('skipSimVideoBtn');
+    const claimBtn = document.getElementById('claimRewardBtn');
+    
+    if (!videoOverlay) {
+      if (typeof onClose === 'function') onClose();
+      return;
     }
+
+    typeLabel.innerText = "Anuncio Intersticial de AdMob";
+    videoOverlay.classList.add('active');
+    
+    claimBtn.classList.add('disabled');
+    claimBtn.disabled = true;
+    claimBtn.innerText = "Cerrar";
+    
+    skipBtn.classList.add('disabled');
+    skipBtn.disabled = true;
+    
+    let timeLeft = 3;
+    timerLabel.innerText = `Omitir en ${timeLeft}s`;
+    skipBtn.innerText = "Omitir anuncio";
+
+    const interval = setInterval(() => {
+      timeLeft--;
+      if (timeLeft > 0) {
+        timerLabel.innerText = `Omitir en ${timeLeft}s`;
+      } else {
+        clearInterval(interval);
+        timerLabel.innerText = "Listo";
+        skipBtn.classList.remove('disabled');
+        skipBtn.disabled = false;
+        skipBtn.innerText = "Cerrar Anuncio";
+      }
+    }, 1000);
+
+    const handleSkip = () => {
+      videoOverlay.classList.remove('active');
+      skipBtn.removeEventListener('click', handleSkip);
+      console.log('[Ads] Anuncio intersticial cerrado.');
+      if (typeof onClose === 'function') onClose();
+    };
+
+    skipBtn.addEventListener('click', handleSkip);
   }
 }
 
 export const ads = new AdManager();
-// Inicializar automáticamente al importar
 ads.init();
-window.AdManager = ads; // Acceso global para debug
+window.AdManager = ads;

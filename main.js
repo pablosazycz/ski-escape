@@ -109,9 +109,10 @@ function resizeCanvas() {
   const container = document.getElementById('gameContainer');
   width = container.clientWidth;
   height = container.clientHeight;
-  canvas.width = width * window.devicePixelRatio;
-  canvas.height = height * window.devicePixelRatio;
-  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2.0); // Tope de 2.0 max para rendimiento a 60 FPS en celulares
+  canvas.width = width * dpr;
+  canvas.height = height * dpr;
+  ctx.scale(dpr, dpr);
 }
 
 window.addEventListener('resize', resizeCanvas);
@@ -222,24 +223,24 @@ yetiImg.src = './yeti_sprite.jpg';
 function makeImageTransparent(img) {
   try {
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = img.naturalWidth;
-    tempCanvas.height = img.naturalHeight;
+    tempCanvas.width = img.naturalWidth || img.width;
+    tempCanvas.height = img.naturalHeight || img.height;
     const tempCtx = tempCanvas.getContext('2d');
     tempCtx.drawImage(img, 0, 0);
     const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
     const data = imgData.data;
     
-    // Tolerancia para remover fondo blanco/blanquecino
-    const tolerance = 20; 
+    const tolerance = 25; 
     for (let i = 0; i < data.length; i += 4) {
       if (data[i] > 255 - tolerance && data[i+1] > 255 - tolerance && data[i+2] > 255 - tolerance) {
-        data[i+3] = 0; // Transparente
+        data[i+3] = 0;
       }
     }
     tempCtx.putImageData(imgData, 0, 0);
-    const newImg = new Image();
-    newImg.src = tempCanvas.toDataURL();
-    return newImg;
+    tempCanvas.complete = true;
+    tempCanvas.naturalWidth = tempCanvas.width;
+    tempCanvas.naturalHeight = tempCanvas.height;
+    return tempCanvas;
   } catch (e) {
     console.warn("No se pudo aplicar transparencia dinámica al sprite:", e);
     return img;
@@ -2104,9 +2105,12 @@ function drawPlayer(x, y) {
     const retroImg = selectedStyle === 'BANANA' ? retroBananaBoarderImg : retroHumanBoarderImg;
     let drawn = false;
 
-    if (activeSkin === 'default' && retroImg.complete && retroImg.naturalWidth > 0) {
-      const frameWidth = retroImg.naturalWidth / 3;
-      const frameHeight = retroImg.naturalHeight;
+    const imgW = retroImg.naturalWidth || retroImg.width || 0;
+    const imgH = retroImg.naturalHeight || retroImg.height || 0;
+
+    if (activeSkin === 'default' && imgW > 0) {
+      const frameWidth = imgW / 3;
+      const frameHeight = imgH;
       let frameIndex = 1; // Center (Front)
       if (turnState === 'LEFT') frameIndex = 0;
       else if (turnState === 'RIGHT') frameIndex = 2;
@@ -2395,9 +2399,12 @@ function drawPlayer(x, y) {
     const retroImg = selectedStyle === 'BANANA' ? retroBananaSkierImg : retroHumanSkierImg;
     let drawn = false;
 
-    if (activeSkin === 'default' && retroImg.complete && retroImg.naturalWidth > 0) {
-      const frameWidth = retroImg.naturalWidth / 3;
-      const frameHeight = retroImg.naturalHeight;
+    const imgW = retroImg.naturalWidth || retroImg.width || 0;
+    const imgH = retroImg.naturalHeight || retroImg.height || 0;
+
+    if (activeSkin === 'default' && imgW > 0) {
+      const frameWidth = imgW / 3;
+      const frameHeight = imgH;
       let frameIndex = 1; // Center (Front)
       if (turnState === 'LEFT') frameIndex = 0;
       else if (turnState === 'RIGHT') frameIndex = 2;
