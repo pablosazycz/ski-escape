@@ -1,0 +1,8 @@
+{
+  "appId": "com.skiescape.game",
+  "appName": "Ski Escape",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  }
+}
