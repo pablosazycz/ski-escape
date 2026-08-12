@@ -109,7 +109,9 @@ function resizeCanvas() {
   const container = document.getElementById('gameContainer');
   width = container.clientWidth;
   height = container.clientHeight;
-  const dpr = Math.min(window.devicePixelRatio || 1, 2.0); // Tope de 2.0 max para rendimiento a 60 FPS en celulares
+  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  const maxDpr = isMobile ? 1.0 : 2.0;
+  const dpr = Math.min(window.devicePixelRatio || 1, maxDpr); // Optimizado para no reventar la GPU de celulares
   canvas.width = width * dpr;
   canvas.height = height * dpr;
   ctx.scale(dpr, dpr);
@@ -1087,7 +1089,13 @@ function updateGameLogic() {
 
   // --- 3. GENERAR Y ACTUALIZAR OBSTÁCULOS ---
   // Limpiar obstáculos que se quedan muy atrás de la cámara (mantener monedas con imán)
-  obstacles = obstacles.filter(obs => obs.y > player.y - (player.hasMagnet ? 500 : 250));
+  let oIndex = 0;
+  for (let i = 0; i < obstacles.length; i++) {
+    if (obstacles[i].y > player.y - (player.hasMagnet ? 500 : 250)) {
+      obstacles[oIndex++] = obstacles[i];
+    }
+  }
+  obstacles.length = oIndex;
 
   // Generar nuevos obstáculos adelante continuamente
   let lastObsY = obstacles.length > 0 ? obstacles[obstacles.length - 1].y : player.y + 120;
@@ -1210,18 +1218,28 @@ function updateGameLogic() {
   }
 
   // --- 4. ACTUALIZAR PARTÍCULAS ---
-  particles.forEach(p => {
+  let pIndex = 0;
+  for (let i = 0; i < particles.length; i++) {
+    let p = particles[i];
     p.x += p.vx;
     p.y += p.vy;
     p.alpha -= p.decay;
-  });
-  particles = particles.filter(p => p.alpha > 0);
+    if (p.alpha > 0) {
+      particles[pIndex++] = p;
+    }
+  }
+  particles.length = pIndex;
 
   // --- 5. ACTUALIZAR RASTROS DE ESQUÍ ---
-  skiTracks.forEach(t => {
+  let sIndex = 0;
+  for (let i = 0; i < skiTracks.length; i++) {
+    let t = skiTracks[i];
     t.alpha -= 0.005; // Se desvanecen lentamente
-  });
-  skiTracks = skiTracks.filter(t => t.alpha > 0);
+    if (t.alpha > 0) {
+      skiTracks[sIndex++] = t;
+    }
+  }
+  skiTracks.length = sIndex;
 }
 
 // ==========================================================================
