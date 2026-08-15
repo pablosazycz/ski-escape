@@ -39,13 +39,24 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
-      - name: Build APK with Gradle
+      - name: Generate Release Keystore
+        run: |
+          keytool -genkey -v -keystore android/app/release.keystore -alias skiescape -keyalg RSA -keysize 2048 -validity 10000 -storepass skiescape123 -keypass skiescape123 -dname "CN=SkiEscape, OU=Games, O=SkiEscape, L=BA, S=BA, C=AR"
+
+      - name: Build APKs with Gradle
         working-directory: android
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleRelease assembleDebug
 
-      - name: Upload APK artifact
+      - name: Upload Release APK artifact (Para Tienda / Amazon)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ski-escape-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 30
+
+      - name: Upload Debug APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: ski-escape-debug-apk
