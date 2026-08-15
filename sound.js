@@ -172,14 +172,34 @@ class SoundManager {
       osc.frequency.setValueAtTime(freq, now + idx * 0.06);
       
       gain.gain.setValueAtTime(0.18, now + idx * 0.06);
-      gain.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.06 + 0.22);
-      
       osc.connect(gain);
       gain.connect(this.ctx.destination);
       
       osc.start(now + idx * 0.06);
       osc.stop(now + idx * 0.06 + 0.23);
     });
+  }
+
+  // Sonido de Roce Rasante / Close Call
+  playNearMiss() {
+    try {
+      this.init();
+      if (this.muted || !this.ctx) return;
+      const now = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(540, now);
+      osc.frequency.exponentialRampToValueAtTime(1080, now + 0.12);
+      gain.gain.setValueAtTime(0.2, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.14);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now);
+      osc.stop(now + 0.15);
+    } catch (e) {
+      console.warn('[Sound] playNearMiss bypassed:', e);
+    }
   }
 
   // Sonido de Power-Up Activado

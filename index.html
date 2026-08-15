@@ -123,12 +123,33 @@
             <button id="shopBtn" class="btn btn-reward btn-compact">
               <span>🛒 TIENDA</span>
             </button>
+            <button id="questsBtn" class="btn btn-secondary btn-compact">
+              <span>🎯 MISIONES</span>
+            </button>
             <button id="howToBtn" class="btn btn-secondary btn-compact">
               <span>❓ CÓMO JUGAR</span>
             </button>
           </div>
           <a href="/privacy.html" target="_blank" class="privacy-link">🔒 Política de Privacidad</a>
         </div>
+      </div>
+    </div>
+
+    <!-- ============================================ -->
+    <!-- MODAL DE MISIONES DIARIAS -->
+    <!-- ============================================ -->
+    <div id="questsModal" class="overlay">
+      <div class="glass-panel text-center quests-panel">
+        <div class="quests-header">
+          <h2 class="panel-title">🎯 MISIONES DIARIAS</h2>
+          <p class="panel-subtitle">Completa desafíos alpinos para ganar monedas extra</p>
+        </div>
+        <div id="questsList" class="quests-list">
+          <!-- Inyectado dinámicamente por JavaScript -->
+        </div>
+        <button id="closeQuestsBtn" class="btn btn-secondary btn-full">
+          <span>VOLVER AL MENÚ</span>
+        </button>
       </div>
     </div>
 
@@ -146,7 +167,7 @@
         </div>
 
         <button id="freeCoinsAdBtn" class="btn btn-reward btn-sm btn-full">
-          <span>📺 +100 Monedas Gratis (Ver Video)</span>
+          <span>📺 +15 Monedas Gratis (Ver Video)</span>
         </button>
 
         <div class="shop-grid">
@@ -154,60 +175,66 @@
           <div class="skin-card active" data-skin="default">
             <div class="skin-icon">🎿</div>
             <div class="skin-info">
-              <span class="skin-title">Esquiador Clásico</span>
+              <span class="skin-title">Clásico Retro</span>
+              <span class="skin-desc" style="font-size:0.68rem; color:#94a3b8;">Estilo puro de ski arcade</span>
               <span class="skin-status">En Uso</span>
             </div>
             <button class="btn btn-sm btn-secondary select-skin-btn" data-skin="default">Usar</button>
           </div>
 
           <!-- Skin 2: Esquiador Fuego -->
-          <div class="skin-card" data-skin="fire" data-rarity="rare">
+          <div class="skin-card" data-skin="fire" data-rarity="rare" data-price="250">
             <div class="skin-icon">🔥</div>
             <div class="skin-info">
-              <span class="skin-title">Fuego</span>
-              <span class="skin-price">150 🪙</span>
+              <span class="skin-title">Fuego Inferno</span>
+              <span class="skin-desc" style="font-size:0.68rem; color:#f97316;">🔥 Quema 1 obstáculo por partida</span>
+              <span class="skin-price">250 🪙</span>
             </div>
-            <button class="btn btn-sm btn-primary buy-skin-btn" data-skin="fire" data-price="150">Comprar</button>
+            <button class="btn btn-sm btn-primary buy-skin-btn" data-skin="fire" data-price="250">Comprar</button>
           </div>
 
           <!-- Skin 3: Snowboard Cyberpunk -->
-          <div class="skin-card" data-skin="cyber" data-rarity="epic">
+          <div class="skin-card" data-skin="cyber" data-rarity="epic" data-price="450">
             <div class="skin-icon">⚡</div>
             <div class="skin-info">
-              <span class="skin-title">Cyberpunk</span>
-              <span class="skin-price">250 🪙</span>
+              <span class="skin-title">Cyberpunk Neon</span>
+              <span class="skin-desc" style="font-size:0.68rem; color:#00f3ff;">🧲 Micro-imán pasivo permanente</span>
+              <span class="skin-price">450 🪙</span>
             </div>
-            <button class="btn btn-sm btn-primary buy-skin-btn" data-skin="cyber" data-price="250">Comprar</button>
+            <button class="btn btn-sm btn-primary buy-skin-btn" data-skin="cyber" data-price="450">Comprar</button>
           </div>
 
           <!-- Skin 4: Yeti Dorado -->
-          <div class="skin-card" data-skin="yeti_gold" data-rarity="legendary">
-            <div class="skin-icon">🦁</div>
+          <div class="skin-card" data-skin="yeti_gold" data-rarity="legendary" data-price="800">
+            <div class="skin-icon">👑</div>
             <div class="skin-info">
-              <span class="skin-title">Yeti Dorado</span>
-              <span class="skin-price">500 🪙</span>
+              <span class="skin-title">Corona Dorada</span>
+              <span class="skin-desc" style="font-size:0.68rem; color:#fbbf24;">🪙 Monedas x2 (+2🪙) y +15% metros</span>
+              <span class="skin-price">800 🪙</span>
             </div>
-            <button class="btn btn-sm btn-primary buy-skin-btn" data-skin="yeti_gold" data-price="500">Comprar</button>
+            <button class="btn btn-sm btn-primary buy-skin-btn" data-skin="yeti_gold" data-price="800">Comprar</button>
           </div>
 
           <!-- Ítem 5: Escudo de Inicio -->
-          <div class="skin-card" data-skin="start_shield" data-rarity="rare">
+          <div class="skin-card" data-skin="start_shield" data-rarity="rare" data-price="500">
             <div class="skin-icon">🛡️</div>
             <div class="skin-info">
               <span class="skin-title">Escudo Inicial</span>
-              <span class="skin-price">300 🪙</span>
+              <span class="skin-desc" style="font-size:0.68rem; color:#38bdf8;">Comienza cada partida con escudo</span>
+              <span class="skin-price">500 🪙</span>
             </div>
-            <button class="btn btn-sm btn-primary buy-skin-btn" data-skin="start_shield" data-price="300">Comprar</button>
+            <button class="btn btn-sm btn-primary buy-skin-btn" data-skin="start_shield" data-price="500">Comprar</button>
           </div>
 
           <!-- Ítem 6: Súper Imán -->
-          <div class="skin-card" data-skin="super_magnet" data-rarity="epic">
+          <div class="skin-card" data-skin="super_magnet" data-rarity="epic" data-price="600">
             <div class="skin-icon">🧲</div>
             <div class="skin-info">
               <span class="skin-title">Imán x2</span>
-              <span class="skin-price">400 🪙</span>
+              <span class="skin-desc" style="font-size:0.68rem; color:#c084fc;">Los imanes recogidos duran el doble</span>
+              <span class="skin-price">600 🪙</span>
             </div>
-            <button class="btn btn-sm btn-primary buy-skin-btn" data-skin="super_magnet" data-price="400">Comprar</button>
+            <button class="btn btn-sm btn-primary buy-skin-btn" data-skin="super_magnet" data-price="600">Comprar</button>
           </div>
         </div>
 

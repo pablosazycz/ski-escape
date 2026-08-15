@@ -1,5 +1,10 @@
 node_modules
 dist
-android
 .DS_Store
 *.log
+.gradle/
+android/.gradle/
+android/app/build/
+android/build/
+*.apk
+*.aab

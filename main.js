@@ -1,6 +1,32 @@
 import { ads } from './ads.js';
 import { sound } from './sound.js';
 import { security } from './security.js';
+import { App } from '@capacitor/app';
+import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
+
+// ==========================================================================
+// VIBRACIÓN HÁPTICA PARA CELULAR (CON FALLBACK WEB)
+// ==========================================================================
+async function triggerHaptic(type = 'light') {
+  try {
+    if (type === 'light') {
+      await Haptics.impact({ style: ImpactStyle.Light });
+    } else if (type === 'medium') {
+      await Haptics.impact({ style: ImpactStyle.Medium });
+    } else if (type === 'heavy') {
+      await Haptics.impact({ style: ImpactStyle.Heavy });
+    } else if (type === 'success') {
+      await Haptics.notification({ type: NotificationType.Success });
+    }
+  } catch (e) {
+    if (navigator.vibrate) {
+      if (type === 'light') navigator.vibrate(12);
+      else if (type === 'medium') navigator.vibrate(28);
+      else if (type === 'heavy') navigator.vibrate(65);
+      else if (type === 'success') navigator.vibrate([20, 35, 20]);
+    }
+  }
+}
 
 // ==========================================================================
 // CONFIGURACIÓN Y ESTADOS DEL JUEGO
@@ -29,6 +55,7 @@ const pauseBtn = document.getElementById('pauseBtn');
 const splashScreen = document.getElementById('splashScreen');
 const mainMenu = document.getElementById('mainMenu');
 const instructionsPanel = document.getElementById('instructionsPanel');
+const privacyModal = document.getElementById('privacyModal');
 const gameHUD = document.getElementById('gameHUD');
 const gameOverMenu = document.getElementById('gameOverMenu');
 const pauseMenu = document.getElementById('pauseMenu');
@@ -59,6 +86,8 @@ const closeShopBtn = document.getElementById('closeShopBtn');
 const freeCoinsAdBtn = document.getElementById('freeCoinsAdBtn');
 const howToBtn = document.getElementById('howToBtn');
 const closeInstBtn = document.getElementById('closeInstBtn');
+const privacyBtn = document.getElementById('privacyBtn');
+const closePrivacyBtn = document.getElementById('closePrivacyBtn');
 const reviveBtn = document.getElementById('reviveBtn');
 const restartBtn = document.getElementById('restartBtn');
 const mainMenuBtn = document.getElementById('mainMenuBtn');
@@ -129,9 +158,14 @@ highScoreVal.innerText = `${highScore}m`;
 
 // Carga segura del perfil del jugador (Anti-Cheat Base64 + Checksum)
 let playerProfile = security.loadSecureData('player_profile', {
-  coins: 500,
+  coins: 0,
   unlockedSkins: ['default'],
-  activeSkin: 'default'
+  activeSkin: 'default',
+  quests: [
+    { id: 'jumps_3', title: '🎿 Realiza 3 saltos 360 en rampas', target: 3, current: 0, reward: 25, completed: false, claimed: false },
+    { id: 'coins_15', title: '🪙 Recoge 15 monedas doradas', target: 15, current: 0, reward: 20, completed: false, claimed: false },
+    { id: 'close_5', title: '🔥 Consigue 5 Roce Rasante (Close Calls)', target: 5, current: 0, reward: 30, completed: false, claimed: false }
+  ]
 });
 
 function saveProfile() {
@@ -140,11 +174,108 @@ function saveProfile() {
 }
 
 function updateCoinsUI() {
-  if (menuCoinsVal) menuCoinsVal.innerText = `${playerProfile.coins} 🪙`;
-  if (hudCoinsVal) hudCoinsVal.innerText = `${playerProfile.coins} 🪙`;
-  if (shopCoinsVal) shopCoinsVal.innerText = `${playerProfile.coins} 🪙`;
+  const mVal = document.getElementById('menuCoinsVal');
+  const hVal = document.getElementById('hudCoinsVal');
+  const sVal = document.getElementById('shopCoinsVal');
+  if (mVal) mVal.innerText = `${playerProfile.coins}`;
+  if (hVal) hVal.innerText = `${playerProfile.coins}`;
+  if (sVal) sVal.innerText = `${playerProfile.coins}`;
 }
 updateCoinsUI();
+
+// --- GESTOR DE MISIONES Y LOGROS ---
+function getQuests() {
+  if (!playerProfile.quests || !Array.isArray(playerProfile.quests) || playerProfile.quests.length === 0) {
+    playerProfile.quests = [
+      { id: 'jumps_3', title: '🎿 Realiza 3 saltos 360 en rampas', target: 3, current: 0, reward: 25, completed: false, claimed: false },
+      { id: 'coins_15', title: '🪙 Recoge 15 monedas doradas', target: 15, current: 0, reward: 20, completed: false, claimed: false },
+      { id: 'close_5', title: '🔥 Consigue 5 Roce Rasante (Close Calls)', target: 5, current: 0, reward: 30, completed: false, claimed: false }
+    ];
+    saveProfile();
+  }
+  return playerProfile.quests;
+}
+
+function updateQuestProgress(questId, amount = 1) {
+  const quests = getQuests();
+  const q = quests.find(item => item.id === questId);
+  if (q && !q.completed) {
+    q.current = Math.min(q.target, (q.current || 0) + amount);
+    if (q.current >= q.target) {
+      q.completed = true;
+      spawnFloatingText(player.x, player.y - 50, '🎯 ¡MISIÓN COMPLETADA!', '#fbbf24', 15);
+      sound.playReward();
+      triggerHaptic('success');
+    }
+    saveProfile();
+  }
+}
+
+function renderQuestsUI() {
+  const questsList = document.getElementById('questsList');
+  if (!questsList) return;
+  questsList.innerHTML = '';
+  const quests = getQuests();
+  quests.forEach(q => {
+    const card = document.createElement('div');
+    card.className = `quest-card ${q.completed ? 'completed' : ''}`;
+    const pct = Math.min(100, Math.round(((q.current || 0) / q.target) * 100));
+    
+    card.innerHTML = `
+      <div class="quest-info">
+        <span class="quest-title">${q.title}</span>
+        <span class="quest-reward">+${q.reward} 🪙 Recompensa (${q.current || 0}/${q.target})</span>
+        <div class="quest-progress-wrap">
+          <div class="quest-progress-fill" style="width: ${pct}%;"></div>
+        </div>
+      </div>
+      <div>
+        ${q.claimed 
+          ? '<span class="text-muted" style="font-size:0.75rem; font-weight:700;">✅ RECLAMADO</span>' 
+          : (q.completed 
+              ? `<button class="btn btn-reward quest-claim-btn" data-qid="${q.id}">RECLAMAR</button>` 
+              : `<span class="text-muted" style="font-size:0.75rem;">${pct}%</span>`)}
+      </div>
+    `;
+    questsList.appendChild(card);
+  });
+}
+
+document.addEventListener('click', (e) => {
+  const qBtn = e.target.closest('#questsBtn');
+  if (qBtn) {
+    try { sound.init(); } catch (err) {}
+    sound.playClick();
+    renderQuestsUI();
+    const modal = document.getElementById('questsModal');
+    if (modal) modal.classList.add('active');
+    return;
+  }
+
+  const closeQBtn = e.target.closest('#closeQuestsBtn');
+  if (closeQBtn) {
+    sound.playClick();
+    const modal = document.getElementById('questsModal');
+    if (modal) modal.classList.remove('active');
+    return;
+  }
+
+  const claimBtn = e.target.closest('.quest-claim-btn');
+  if (claimBtn) {
+    const qid = claimBtn.getAttribute('data-qid');
+    const quests = getQuests();
+    const q = quests.find(item => item.id === qid);
+    if (q && q.completed && !q.claimed) {
+      q.claimed = true;
+      playerProfile.coins += q.reward;
+      saveProfile();
+      sound.playReward();
+      triggerHaptic('success');
+      spawnConfetti();
+      renderQuestsUI();
+    }
+  }
+});
 
 function updatePowerUpBadges() {
   if (shieldBadge) {
@@ -232,7 +363,7 @@ function makeImageTransparent(img) {
     const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
     const data = imgData.data;
     
-    const tolerance = 25; 
+    const tolerance = 35; 
     for (let i = 0; i < data.length; i += 4) {
       if (data[i] > 255 - tolerance && data[i+1] > 255 - tolerance && data[i+2] > 255 - tolerance) {
         data[i+3] = 0;
@@ -249,17 +380,11 @@ function makeImageTransparent(img) {
   }
 }
 
-// Sprites Retro Pixel Art (3 poses: Left, Front, Right)
+// Sprites Retro Pixel Art - Esquiadores (Human y Banana)
 let retroBananaSkierImg = new Image();
 retroBananaSkierImg.src = './banana_skier_retro_sprites.png';
 retroBananaSkierImg.onload = () => {
   retroBananaSkierImg = makeImageTransparent(retroBananaSkierImg);
-};
-
-let retroBananaBoarderImg = new Image();
-retroBananaBoarderImg.src = './banana_boarder_retro_sprites.png';
-retroBananaBoarderImg.onload = () => {
-  retroBananaBoarderImg = makeImageTransparent(retroBananaBoarderImg);
 };
 
 let retroHumanSkierImg = new Image();
@@ -268,11 +393,24 @@ retroHumanSkierImg.onload = () => {
   retroHumanSkierImg = makeImageTransparent(retroHumanSkierImg);
 };
 
-let retroHumanBoarderImg = new Image();
-retroHumanBoarderImg.src = './snowboarder_retro_sprites.png';
-retroHumanBoarderImg.onload = () => {
-  retroHumanBoarderImg = makeImageTransparent(retroHumanBoarderImg);
-};
+// Sprites Retro Pixel Art - Snowboarders (3 Poses 100% individuales e independientes)
+const humanBoarderLeftImg = new Image();
+humanBoarderLeftImg.src = './human_boarder_left.png';
+
+const humanBoarderDownImg = new Image();
+humanBoarderDownImg.src = './human_boarder_down.png';
+
+const humanBoarderRightImg = new Image();
+humanBoarderRightImg.src = './human_boarder_right.png';
+
+const bananaBoarderLeftImg = new Image();
+bananaBoarderLeftImg.src = './banana_boarder_left.png';
+
+const bananaBoarderDownImg = new Image();
+bananaBoarderDownImg.src = './banana_boarder_down.png';
+
+const bananaBoarderRightImg = new Image();
+bananaBoarderRightImg.src = './banana_boarder_right.png';
 
 // Configuración de generación de obstáculos
 const OBSTACLE_TYPES = {
@@ -297,20 +435,41 @@ window.addEventListener('keyup', (e) => {
   keys[e.key] = false;
 });
 
-// Táctil (Móvil) — Control direccional analógico directo y ultra responsivo
-canvas.addEventListener('touchstart', (e) => {
-  const touch = e.touches[0];
+// Control direccional analógico directo y ultra responsivo (Móvil y Mouse/PC)
+function updateTouchTarget(clientX) {
   const rect = canvas.getBoundingClientRect();
   const scale = width / rect.width;
-  touchTargetX = (touch.clientX - rect.left) * scale;
+  touchTargetX = (clientX - rect.left) * scale;
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  sound.init();
+  updateTouchTarget(e.clientX);
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (e.buttons > 0 || touchTargetX !== null) {
+    updateTouchTarget(e.clientX);
+  }
+});
+
+window.addEventListener('pointerup', () => {
+  touchTargetX = null;
+  keys['ArrowLeft'] = false;
+  keys['ArrowRight'] = false;
+});
+
+canvas.addEventListener('touchstart', (e) => {
+  if (e.touches.length > 0) {
+    updateTouchTarget(e.touches[0].clientX);
+  }
   e.preventDefault();
 }, { passive: false });
 
 canvas.addEventListener('touchmove', (e) => {
-  const touch = e.touches[0];
-  const rect = canvas.getBoundingClientRect();
-  const scale = width / rect.width;
-  touchTargetX = (touch.clientX - rect.left) * scale;
+  if (e.touches.length > 0) {
+    updateTouchTarget(e.touches[0].clientX);
+  }
   e.preventDefault();
 }, { passive: false });
 
@@ -344,97 +503,158 @@ muteBtn.addEventListener('click', (e) => {
   e.stopPropagation();
 });
 
-// Selección de Personaje (Esquiador o Snowboard)
-
 function setCharActive(btn) {
-  [charSkierBtn, charBoarderBtn].forEach(b => {
+  const skier = document.getElementById('charSkierBtn');
+  const boarder = document.getElementById('charBoarderBtn');
+  [skier, boarder].forEach(b => {
     if (b) b.classList.remove('active');
   });
   if (btn) btn.classList.add('active');
 }
-
-charSkierBtn.addEventListener('click', () => {
-  selectedChar = 'SKIER';
-  playerProfile.activeSkin = 'default';
-  saveProfile();
-  setCharActive(charSkierBtn);
-});
-
-charBoarderBtn.addEventListener('click', () => {
-  selectedChar = 'BOARDER';
-  playerProfile.activeSkin = 'default';
-  saveProfile();
-  setCharActive(charBoarderBtn);
-});
-
-styleBananaBtn.addEventListener('click', () => {
-  selectedStyle = 'BANANA';
-  setStyleActive(styleBananaBtn);
-});
-
-styleHumanBtn.addEventListener('click', () => {
-  selectedStyle = 'HUMAN';
-  setStyleActive(styleHumanBtn);
-});
 
 function setStyleActive(btn) {
-  [styleBananaBtn, styleHumanBtn].forEach(b => {
+  const bBanana = document.getElementById('styleBananaBtn');
+  const bHuman = document.getElementById('styleHumanBtn');
+  [bBanana, bHuman].forEach(b => {
     if (b) b.classList.remove('active');
   });
   if (btn) btn.classList.add('active');
 }
 
-// Selección de Dificultad
-diffEasyBtn.addEventListener('click', () => {
-  currentDiff = DIFFICULTIES.EASY;
-  setDiffActive(diffEasyBtn);
-});
-diffMedBtn.addEventListener('click', () => {
-  currentDiff = DIFFICULTIES.MEDIUM;
-  setDiffActive(diffMedBtn);
-});
-diffHardBtn.addEventListener('click', () => {
-  currentDiff = DIFFICULTIES.HARD;
-  setDiffActive(diffHardBtn);
-});
-
 function setDiffActive(activeBtn) {
-  [diffEasyBtn, diffMedBtn, diffHardBtn].forEach(b => b.classList.remove('active'));
-  activeBtn.classList.add('active');
+  const dEasy = document.getElementById('diffEasyBtn');
+  const dMed = document.getElementById('diffMedBtn');
+  const dHard = document.getElementById('diffHardBtn');
+  [dEasy, dMed, dHard].forEach(b => {
+    if (b) b.classList.remove('active');
+  });
+  if (activeBtn) activeBtn.classList.add('active');
 }
 
-// Evento global para el botón ¡JUGAR!
+// Delegación global de todos los botones y menús principales
 document.addEventListener('click', (e) => {
+  // Selector de Personaje (Esquiador / Snowboard)
+  const charBtn = e.target.closest('#charSkierBtn, #charBoarderBtn');
+  if (charBtn) {
+    if (charBtn.id === 'charSkierBtn') {
+      selectedChar = 'SKIER';
+    } else {
+      selectedChar = 'BOARDER';
+    }
+    playerProfile.activeSkin = 'default';
+    saveProfile();
+    setCharActive(charBtn);
+    try { sound.playClick(); } catch (err) {}
+    return;
+  }
+
+  // Selector de Estilo (Plátano / Humano)
+  const styleBtn = e.target.closest('#styleBananaBtn, #styleHumanBtn');
+  if (styleBtn) {
+    if (styleBtn.id === 'styleBananaBtn') {
+      selectedStyle = 'BANANA';
+    } else {
+      selectedStyle = 'HUMAN';
+    }
+    setStyleActive(styleBtn);
+    try { sound.playClick(); } catch (err) {}
+    return;
+  }
+
+  // Selector de Dificultad
+  const diffBtn = e.target.closest('#diffEasyBtn, #diffMedBtn, #diffHardBtn');
+  if (diffBtn) {
+    if (diffBtn.id === 'diffEasyBtn') currentDiff = DIFFICULTIES.EASY;
+    else if (diffBtn.id === 'diffMedBtn') currentDiff = DIFFICULTIES.MEDIUM;
+    else if (diffBtn.id === 'diffHardBtn') currentDiff = DIFFICULTIES.HARD;
+    setDiffActive(diffBtn);
+    try { sound.playClick(); } catch (err) {}
+    return;
+  }
+
+  // Botón ¡JUGAR!
   const pBtn = e.target.closest('#playBtn');
   if (pBtn) {
     e.stopPropagation();
     console.log('[Game] ¡JUGAR! presionado');
     try { sound.init(); } catch (err) {}
     startGame();
+    return;
   }
-});
 
-howToBtn.addEventListener('click', () => instructionsPanel.classList.add('active'));
-closeInstBtn.addEventListener('click', () => instructionsPanel.classList.remove('active'));
+  // Botón MISIONES
+  const qBtn = e.target.closest('#questsBtn');
+  if (qBtn) {
+    try { sound.init(); sound.playClick(); } catch (err) {}
+    renderQuestsUI();
+    const modal = document.getElementById('questsModal');
+    if (modal) modal.classList.add('active');
+    return;
+  }
 
-// --- EVENTOS DE TIENDA Y MONEDAS ---
-shopBtn.addEventListener('click', () => {
-  updateShopUI();
-  shopModal.classList.add('active');
-});
+  const closeQBtn = e.target.closest('#closeQuestsBtn');
+  if (closeQBtn) {
+    try { sound.playClick(); } catch (err) {}
+    const modal = document.getElementById('questsModal');
+    if (modal) modal.classList.remove('active');
+    return;
+  }
 
-closeShopBtn.addEventListener('click', () => {
-  shopModal.classList.remove('active');
+  // Botón TIENDA
+  const sBtn = e.target.closest('#shopBtn');
+  if (sBtn) {
+    try { sound.playClick(); } catch (err) {}
+    updateShopUI();
+    if (shopModal) shopModal.classList.add('active');
+    return;
+  }
+
+  const closeSBtn = e.target.closest('#closeShopBtn');
+  if (closeSBtn) {
+    try { sound.playClick(); } catch (err) {}
+    if (shopModal) shopModal.classList.remove('active');
+    return;
+  }
+
+  // Botón CÓMO JUGAR
+  const hBtn = e.target.closest('#howToBtn');
+  if (hBtn) {
+    try { sound.playClick(); } catch (err) {}
+    if (instructionsPanel) instructionsPanel.classList.add('active');
+    return;
+  }
+
+  const closeHBtn = e.target.closest('#closeInstBtn');
+  if (closeHBtn) {
+    try { sound.playClick(); } catch (err) {}
+    if (instructionsPanel) instructionsPanel.classList.remove('active');
+    return;
+  }
+
+  // Botón POLÍTICA DE PRIVACIDAD
+  const privBtn = e.target.closest('#privacyBtn');
+  if (privBtn) {
+    try { sound.playClick(); } catch (err) {}
+    if (privacyModal) privacyModal.classList.add('active');
+    return;
+  }
+
+  const closePrivBtn = e.target.closest('#closePrivacyBtn');
+  if (closePrivBtn) {
+    try { sound.playClick(); } catch (err) {}
+    if (privacyModal) privacyModal.classList.remove('active');
+    return;
+  }
 });
 
 freeCoinsAdBtn.addEventListener('click', () => {
   ads.showRewarded(
     () => {
-      playerProfile.coins += 100;
+      playerProfile.coins += 15;
       saveProfile();
       updateShopUI();
       sound.playCoin();
-      console.log('[Shop] +100 Monedas otorgadas por ver anuncio');
+      console.log('[Shop] +15 Monedas otorgadas por ver anuncio');
     },
     () => {
       console.log('[Shop] Anuncio cancelado');
@@ -452,34 +672,59 @@ function updateShopUI() {
 
     const isUnlocked = playerProfile.unlockedSkins.includes(skinKey);
     const isActive = playerProfile.activeSkin === skinKey;
+    const isPowerUp = skinKey === 'start_shield' || skinKey === 'super_magnet';
 
-    if (isActive) {
-      card.classList.add('active');
-      if (statusText) statusText.innerText = 'En Uso';
-      if (priceText) priceText.innerText = 'Comprado';
-      if (cardBtn) {
-        cardBtn.className = 'btn btn-sm btn-secondary select-skin-btn disabled';
-        cardBtn.innerText = 'Equipado';
-        cardBtn.disabled = true;
-      }
-    } else if (isUnlocked) {
-      card.classList.remove('active');
-      if (statusText) statusText.innerText = 'Comprado';
-      if (priceText) priceText.innerText = 'Comprado';
-      if (cardBtn) {
-        cardBtn.className = 'btn btn-sm btn-primary select-skin-btn';
-        cardBtn.innerText = 'Usar';
-        cardBtn.disabled = false;
-        cardBtn.setAttribute('data-skin', skinKey);
+    if (isPowerUp) {
+      if (isUnlocked) {
+        card.classList.add('active');
+        if (priceText) priceText.innerText = 'Desbloqueado';
+        if (statusText) statusText.innerText = 'Activo';
+        if (cardBtn) {
+          cardBtn.className = 'btn btn-sm btn-secondary disabled';
+          cardBtn.innerText = '✅ Activo';
+          cardBtn.disabled = true;
+        }
+      } else {
+        card.classList.remove('active');
+        const defaultPrice = card.getAttribute('data-price') || '300';
+        if (priceText) priceText.innerText = `${defaultPrice} 🪙`;
+        if (cardBtn) {
+          cardBtn.className = 'btn btn-sm btn-primary buy-skin-btn';
+          cardBtn.innerText = 'Comprar';
+          cardBtn.disabled = false;
+          cardBtn.setAttribute('data-skin', skinKey);
+        }
       }
     } else {
-      card.classList.remove('active');
-      if (statusText) statusText.innerText = 'Bloqueado';
-      if (cardBtn) {
-        cardBtn.className = 'btn btn-sm btn-primary buy-skin-btn';
-        cardBtn.innerText = 'Comprar';
-        cardBtn.disabled = false;
-        cardBtn.setAttribute('data-skin', skinKey);
+      if (isActive) {
+        card.classList.add('active');
+        if (statusText) statusText.innerText = 'En Uso';
+        if (priceText) priceText.innerText = 'Equipado';
+        if (cardBtn) {
+          cardBtn.className = 'btn btn-sm btn-secondary select-skin-btn disabled';
+          cardBtn.innerText = 'Equipado';
+          cardBtn.disabled = true;
+        }
+      } else if (isUnlocked) {
+        card.classList.remove('active');
+        if (statusText) statusText.innerText = 'Desbloqueado';
+        if (priceText) priceText.innerText = 'Comprado';
+        if (cardBtn) {
+          cardBtn.className = 'btn btn-sm btn-primary select-skin-btn';
+          cardBtn.innerText = 'Usar';
+          cardBtn.disabled = false;
+          cardBtn.setAttribute('data-skin', skinKey);
+        }
+      } else {
+        card.classList.remove('active');
+        const defaultPrice = card.getAttribute('data-price') || '150';
+        if (priceText) priceText.innerText = `${defaultPrice} 🪙`;
+        if (cardBtn) {
+          cardBtn.className = 'btn btn-sm btn-primary buy-skin-btn';
+          cardBtn.innerText = 'Comprar';
+          cardBtn.disabled = false;
+          cardBtn.setAttribute('data-skin', skinKey);
+        }
       }
     }
   });
@@ -629,6 +874,67 @@ window.addEventListener('keydown', (e) => {
   }
 });
 
+// Manejo del ciclo de vida en Navegador (Pausar audio y juego si se minimiza o cambia de pestaña)
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    if (gameState === STATES.PLAYING || gameState === STATES.JUMPING) {
+      pauseGame();
+    }
+    sound.stopMusic();
+  }
+});
+
+// Soporte nativo para Android / Fire OS (Hardware Back Button y App Lifecycle)
+try {
+  App.addListener('backButton', () => {
+    // 1. Si el modal de privacidad está abierto
+    if (privacyModal && privacyModal.classList.contains('active')) {
+      privacyModal.classList.remove('active');
+      return;
+    }
+    // 2. Si el modal de la tienda está abierto
+    if (shopModal && shopModal.classList.contains('active')) {
+      shopModal.classList.remove('active');
+      return;
+    }
+    // 3. Si el panel de instrucciones está abierto
+    if (instructionsPanel && instructionsPanel.classList.contains('active')) {
+      instructionsPanel.classList.remove('active');
+      return;
+    }
+    // 4. Si el juego está en curso -> pausar
+    if (gameState === STATES.PLAYING || gameState === STATES.JUMPING) {
+      pauseGame();
+      return;
+    }
+    // 5. Si está en pausa -> reanudar
+    if (gameState === STATES.PAUSED) {
+      resumeGame();
+      return;
+    }
+    // 6. Si está en Game Over -> ir al menú principal
+    if (gameState === STATES.GAMEOVER) {
+      showMenu();
+      return;
+    }
+    // 7. Si está en el Menú Principal -> salir de la app
+    if (gameState === STATES.START) {
+      App.exitApp();
+    }
+  });
+
+  App.addListener('appStateChange', ({ isActive }) => {
+    if (!isActive) {
+      if (gameState === STATES.PLAYING || gameState === STATES.JUMPING) {
+        pauseGame();
+      }
+      sound.stopMusic();
+    }
+  });
+} catch (err) {
+  console.log('[Native App] Listener de Capacitor no disponible en web pura:', err);
+}
+
 // Splash screen con barra de progreso animada
 (function animateSplash() {
   const progressFill = document.getElementById('splashProgressFill');
@@ -707,6 +1013,12 @@ function startGame() {
   player.hasShield = playerProfile.unlockedSkins.includes('start_shield');
   player.hasMagnet = false;
   player.magnetTimer = 0;
+
+  // Habilidades de Skins especiales
+  const skin = playerProfile.activeSkin || 'default';
+  player.fireArmor = (skin === 'fire'); // 1 quema de obstáculo disponible
+  player.isCyber = (skin === 'cyber');   // Micro-imán pasivo permanente
+  player.isMidas = (skin === 'yeti_gold'); // Monedas x2 y +15% de metros
   updatePowerUpBadges();
 
   yeti.active = false;
@@ -800,18 +1112,22 @@ function updateGameLogic() {
 
   // --- 1. ACTUALIZAR JUGADOR ---
   if (gameState === STATES.PLAYING || gameState === STATES.JUMPING) {
-    // Aceleración y maniobrabilidad en X (Súper fluida y orgánica)
+    // Aceleración y maniobrabilidad en X (Súper ágil, responsiva y fluida)
+    const maxLat = selectedChar === 'SKIER' ? 6.5 : 5.8;
+    const accelRate = selectedChar === 'SKIER' ? 1.3 : 1.1;
+    player.maxSpeedX = maxLat;
+
     if (touchTargetX !== null) {
       // Control táctil analógico progresivo según la distancia al dedo
       const diffX = touchTargetX - player.x;
-      player.speedX += diffX * 0.12;
-      player.speedX *= 0.82;
+      player.speedX += diffX * 0.16;
+      player.speedX *= 0.83;
     } else if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
-      player.speedX -= 0.85;
+      player.speedX -= accelRate;
     } else if (keys['ArrowRight'] || keys['d'] || keys['D']) {
-      player.speedX += 0.85;
+      player.speedX += accelRate;
     } else {
-      player.speedX *= 0.86;
+      player.speedX *= 0.83;
     }
 
     // Límites de velocidad horizontal
@@ -820,7 +1136,7 @@ function updateGameLogic() {
 
     // Ángulo de inclinación súper fluido interpolado con lerp (sin micro-saltos)
     const targetAngle = (player.speedX / player.maxSpeedX) * 0.65;
-    player.angle += (targetAngle - player.angle) * 0.22;
+    player.angle += (targetAngle - player.angle) * 0.25;
 
     // Clampar límites laterales del mapa
     if (player.x < player.width) {
@@ -885,6 +1201,8 @@ function updateGameLogic() {
         player.turboTimer = 65; // ~1.1 segundos de turbo desatado
         sound.playTurbo(); // Sonido de impulso turbo
         sound.playReward(); // Sonido de recompensa por truco
+        triggerHaptic('medium');
+        updateQuestProgress('jumps_3', 1);
 
         // Otorgar Bonus de Truco (Distancia + Monedas)
         player.trickBonus = (player.trickBonus || 0) + 50;
@@ -922,9 +1240,22 @@ function updateGameLogic() {
       }
     }
 
-    // Calcular score (con multiplicador de dificultad + bonus de trucos)
-    score = Math.floor((player.y / 10) * currentDiff.mult) + (player.trickBonus || 0);
+    // Calcular score (con multiplicador de dificultad + bonus de skin + bonus de trucos)
+    const skinScoreMult = player.isMidas ? 1.15 : 1.0;
+    score = Math.floor((player.y / 10) * currentDiff.mult * skinScoreMult) + (player.trickBonus || 0);
     distanceVal.innerText = `${score}m`;
+
+    // Celebración en vivo al superar el récord durante la carrera
+    if (highScore > 40 && score > highScore && !player._recordBroken) {
+      player._recordBroken = true;
+      sound.playReward();
+      triggerHaptic('success');
+      spawnFloatingText(player.x, player.y - 45, '🏆 ¡NUEVO RÉCORD!', '#fbbf24', 18);
+      for (let i = 0; i < 20; i++) {
+        const pColor = i % 3 === 0 ? '#fbbf24' : (i % 3 === 1 ? '#00f3ff' : '#f43f5e');
+        spawnParticle(player.x, player.y, pColor, 3.5, Math.random() * 8 - 4, Math.random() * -5 - 2);
+      }
+    }
     
     // Velocidad en km/h con color dinámico
     const speedKmh = Math.floor(player.speedY * 12);
@@ -955,6 +1286,7 @@ function updateGameLogic() {
     // Cambiar a música de combate del Yeti y sonar alerta
     sound.playYetiTheme();
     sound.playYetiWarning();
+    triggerHaptic('heavy');
   }
 
   if (yeti.active) {
@@ -970,6 +1302,7 @@ function updateGameLogic() {
       // Temblor de pantalla (Camera Shake) por las monstruosas pisadas del Yeti
       if (distanceToYeti < 35 && Math.sin((Date.now() * 0.015)) > 0.4) {
         cameraShakeY = (Math.random() - 0.5) * Math.max(1, (35 - distanceToYeti) * 0.4);
+        if (Math.random() < 0.1) triggerHaptic('light');
       } else {
         cameraShakeY = 0;
       }
@@ -1055,6 +1388,7 @@ function updateGameLogic() {
         // ¡El Yeti te come!
         gameState = STATES.EATEN;
         window.gameState = gameState;
+        triggerHaptic('heavy');
         
         // Detener música y reproducir grito de terror y comer
         sound.stopMusic();
@@ -1104,26 +1438,31 @@ function updateGameLogic() {
     spawnObstacle(lastObsY);
   }
 
-  // Lógica de temporizador de Imán y atracción magnética omnidireccional
-  if (player.hasMagnet) {
-    player.magnetTimer--;
-    if (player.magnetTimer <= 0) {
-      player.hasMagnet = false;
+  // Lógica de temporizador de Imán y atracción magnética equilibrada (con micro-imán Cyberpunk pasivo)
+  const hasActiveMagnet = player.hasMagnet || player.isCyber;
+  if (hasActiveMagnet) {
+    if (player.hasMagnet) {
+      player.magnetTimer--;
+      if (player.magnetTimer <= 0) {
+        player.hasMagnet = false;
+      }
+      updatePowerUpBadges();
     }
-    updatePowerUpBadges();
 
-    // Atraer TODAS las monedas en pantalla (arriba, abajo y a los costados) directo a las manos del jugador
+    // Rango de atracción: 170px con ítem recogido o 95px con micro-imán pasivo Cyberpunk
+    const magnetRange = player.hasMagnet ? 170 : 95;
     for (let obs of obstacles) {
       if (!obs.collected && obs.type === OBSTACLE_TYPES.COIN) {
         const dx = player.x - obs.x;
         const dy = player.y - obs.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        if (dist < 480) {
-          const angle = Math.atan2(dy, dx);
-          const pullSpeed = 16 + Math.min(10, player.speedY);
-          obs.x += Math.cos(angle) * pullSpeed;
-          obs.y += Math.sin(angle) * pullSpeed;
+        if (dist < magnetRange && dist > 1) {
+          // Atracción suave que aumenta proporcionalmente a la cercanía
+          const pullProgress = 1 - (dist / magnetRange);
+          const pullSpeed = (player.hasMagnet ? 4.5 : 2.8) + pullProgress * 7.5 + (player.speedY * 0.3);
+          obs.x += (dx / dist) * pullSpeed;
+          obs.y += (dy / dist) * pullSpeed;
         }
       }
     }
@@ -1138,20 +1477,32 @@ function updateGameLogic() {
       const dy = player.y - obs.y;
       const distance = Math.sqrt(dx * dx + dy * dy);
 
-      // Efecto de Imán de Monedas: atraerlas hacia el jugador si está cerca
-      if (player.hasMagnet && obs.type === OBSTACLE_TYPES.COIN && distance < 220) {
-        obs.x += (player.x - obs.x) * 0.18;
-        obs.y += (player.y - obs.y) * 0.18;
+      // --- Roce Rasante / Close Call (Slalom Pro) ---
+      if (!obs._nearMiss && distance >= (player.width / 2 + obs.radius) && distance < (player.width / 2 + obs.radius + 15) &&
+          (obs.type === OBSTACLE_TYPES.TREE || obs.type === OBSTACLE_TYPES.ROCK || obs.type === OBSTACLE_TYPES.SNOWMAN)) {
+        obs._nearMiss = true;
+        player.trickBonus = (player.trickBonus || 0) + 10;
+        spawnFloatingText(player.x, player.y - 25, '🔥 CLOSE CALL! +10m', '#f97316', 13);
+        sound.playNearMiss();
+        triggerHaptic('light');
+        updateQuestProgress('close_5', 1);
+        for (let s = 0; s < 4; s++) {
+          spawnParticle(player.x, player.y, '#ffffff', 2, (Math.random() - 0.5) * 4, -1);
+        }
       }
 
       if (distance < (player.width / 2 + obs.radius)) {
         if (obs.type === OBSTACLE_TYPES.COIN) {
-          // Moneda Dorada recogida
+          // Moneda Dorada recogida (Skin Corona Dorada otorga +2 🪙)
           obs.collected = true;
-          playerProfile.coins += 1;
+          const coinVal = player.isMidas ? 2 : 1;
+          playerProfile.coins += coinVal;
           saveProfile();
           sound.playCoin();
-          for (let i = 0; i < 6; i++) {
+          triggerHaptic('light');
+          updateQuestProgress('coins_15', 1);
+          spawnFloatingText(obs.x, obs.y - 12, player.isMidas ? '+2 🪙 MIDAS!' : '+1 🪙', '#fbbf24', player.isMidas ? 16 : 14);
+          for (let i = 0; i < (player.isMidas ? 10 : 6); i++) {
             spawnParticle(obs.x, obs.y, '#ffad00', 2.5, Math.random() * 4 - 2, Math.random() * 4 - 2);
           }
         } else if (obs.type === OBSTACLE_TYPES.SHIELD) {
@@ -1160,16 +1511,21 @@ function updateGameLogic() {
           player.hasShield = true;
           updatePowerUpBadges();
           sound.playPowerUp();
+          triggerHaptic('medium');
+          spawnFloatingText(obs.x, obs.y - 15, '🛡️ ESCUDO ACTIVO', '#00f3ff', 14);
           for (let i = 0; i < 10; i++) {
             spawnParticle(obs.x, obs.y, '#00f3ff', 3, Math.random() * 5 - 2.5, Math.random() * 5 - 2.5);
           }
         } else if (obs.type === OBSTACLE_TYPES.MAGNET) {
-          // Imán de Monedas recogido
+          // Imán de Monedas recogido (Súper Imán perk duplica duración)
           obs.collected = true;
           player.hasMagnet = true;
-          player.magnetTimer = 360; // 6 segundos de imán
+          const hasSuper = playerProfile.unlockedSkins.includes('super_magnet');
+          player.magnetTimer = hasSuper ? 720 : 360; // 12 segs o 6 segs
           updatePowerUpBadges();
           sound.playPowerUp();
+          triggerHaptic('medium');
+          spawnFloatingText(obs.x, obs.y - 15, hasSuper ? '🧲 IMÁN x2 ACTIVADO' : '🧲 IMÁN ACTIVADO', '#c084fc', 14);
           for (let i = 0; i < 10; i++) {
             spawnParticle(obs.x, obs.y, '#c084fc', 3, Math.random() * 5 - 2.5, Math.random() * 5 - 2.5);
           }
@@ -1181,22 +1537,37 @@ function updateGameLogic() {
           player.jumpAirTime = 0;
           player.speedY += 2;
         } else if (player.crashCooldown === 0 && (obs.type === OBSTACLE_TYPES.TREE || obs.type === OBSTACLE_TYPES.ROCK || obs.type === OBSTACLE_TYPES.SNOWMAN)) {
-          // Si el jugador tiene ESCUDO ACTIVO:
+          // 1. Si el jugador tiene ESCUDO ACTIVO:
           if (player.hasShield) {
             player.hasShield = false;
             updatePowerUpBadges();
             player.crashCooldown = 60; // 1 segundo de invulnerabilidad tras estallar el escudo
             obs.collected = true; // Destruir el obstáculo
             sound.playPowerUp(); // Sonido de choque absorbido
+            triggerHaptic('heavy');
+            spawnFloatingText(player.x, player.y - 25, '🛡️ ¡ESCUDO ABSORBIÓ CHOQUE!', '#00f3ff', 14);
             for (let i = 0; i < 16; i++) {
               spawnParticle(player.x, player.y, '#00f3ff', 3.5, Math.random() * 6 - 3, Math.random() * 6 - 3);
             }
+          // 2. Si el jugador tiene LLAMARADA TÉRMICA (Skin Fuego):
+          } else if (player.fireArmor) {
+            player.fireArmor = false;
+            obs.collected = true; // Quema y destruye el obstáculo
+            player.crashCooldown = 50; // Invulnerabilidad
+            sound.playPowerUp();
+            triggerHaptic('heavy');
+            spawnFloatingText(player.x, player.y - 25, '🔥 ¡OBSTÁCULO QUEMADO!', '#f97316', 15);
+            for (let i = 0; i < 18; i++) {
+              spawnParticle(player.x, player.y, '#f97316', 3.5, Math.random() * 6 - 3, Math.random() * 6 - 3);
+              spawnParticle(player.x, player.y, '#fbbf24', 2.5, Math.random() * 4 - 2, Math.random() * 4 - 2);
+            }
           } else {
-            // ¡Choque común sin escudo!
+            // ¡Choque común sin escudo ni fuego!
             gameState = STATES.CRASHED;
             window.gameState = gameState;
             sound.stopMusic();
             sound.playCrash(obs.type);
+            triggerHaptic('heavy');
 
             player.speedX = 0;
             player.speedY = 0;
@@ -1353,14 +1724,15 @@ function triggerGameOver(reason, eatenByYeti = false) {
   }
 
   // Configuración del botón de revivir
+  const reviveLabel = document.getElementById('reviveBtnLabel') || reviveBtn.querySelector('span:last-child');
   if (player.hasRevived || eatenByYeti) {
     reviveBtn.classList.add('disabled');
     reviveBtn.disabled = true;
-    reviveBtn.querySelector('span:last-child').innerText = eatenByYeti ? "NO SE PUEDE REVIVIR DEL YETI" : "YA HAS REVIVIDO";
+    if (reviveLabel) reviveLabel.innerText = eatenByYeti ? "NO SE PUEDE REVIVIR DEL YETI" : "YA HAS REVIVIDO";
   } else {
     reviveBtn.classList.remove('disabled');
     reviveBtn.disabled = false;
-    reviveBtn.querySelector('span:last-child').innerText = "REVIVIR (Ver Video)";
+    if (reviveLabel) reviveLabel.innerText = "REVIVIR (Ver Video)";
   }
 
   // Mostrar el menú con shake si fue comido
@@ -1416,8 +1788,22 @@ function spawnConfetti() {
 // ==========================================================================
 
 function render() {
-  // Limpiar pantalla
-  ctx.fillStyle = '#f8fafc'; // Nieve pura
+  // Limpiar pantalla con tinte dinámico de paisaje alpino (Día -> Atardecer -> Noche Polar)
+  let bgR = 248, bgG = 250, bgB = 252; // Día Alpino Pristino
+  if (score > 1000 && score <= 2200) {
+    // Atardecer dorado / lavanda
+    const t = (score - 1000) / 1200;
+    bgR = Math.round(248 - t * 8);
+    bgG = Math.round(250 - t * 24);
+    bgB = Math.round(252 - t * 14);
+  } else if (score > 2200) {
+    // Noche polar / aurora borealis suave
+    const t = Math.min(1, (score - 2200) / 1500);
+    bgR = Math.round(240 - t * 28);
+    bgG = Math.round(226 - t * 30);
+    bgB = Math.round(238 - t * 16);
+  }
+  ctx.fillStyle = `rgb(${bgR}, ${bgG}, ${bgB})`;
   ctx.fillRect(0, 0, width, height);
 
   // El juego se dibuja con una cámara con seguimiento interpolado ultra fluido.
@@ -1994,152 +2380,92 @@ function drawPlayer(x, y) {
     ctx.restore();
   }
 
-  // Aura especial visual según la Skin activa (se dibuja ANTES del personaje)
+  // Aura especial visual según la Skin activa (se dibuja detrás del personaje)
   if (activeSkin === 'fire') {
     ctx.save();
     ctx.strokeStyle = '#ea580c';
-    ctx.fillStyle = 'rgba(234, 88, 12, 0.2)';
+    ctx.fillStyle = 'rgba(234, 88, 12, 0.22)';
     ctx.lineWidth = 2.5;
-    ctx.shadowColor = '#f97316';
-    // ctx.shadowBlur removed for perf
     ctx.beginPath();
-    ctx.ellipse(0, 8, 21, 27, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 8, 20, 26, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
+    if (Math.random() < 0.35) {
+      spawnParticle(x + (Math.random() * 16 - 8), y + 10, '#f97316', 3, (Math.random() - 0.5) * 2, Math.random() * 2 + 1);
+    }
   } else if (activeSkin === 'cyber') {
     ctx.save();
     ctx.strokeStyle = '#00f3ff';
     ctx.fillStyle = 'rgba(0, 243, 255, 0.2)';
     ctx.lineWidth = 2.5;
-    ctx.shadowColor = '#00f3ff';
-    // ctx.shadowBlur removed for perf
     ctx.beginPath();
-    ctx.ellipse(0, 8, 21, 27, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 8, 20, 26, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
-  }
-
-  if (activeSkin === 'yeti_gold') {
-    // --- SKIN: YETI DORADO PRO ---
-    // Sombra en el suelo
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.12)';
-    ctx.beginPath();
-    ctx.ellipse(0, 16, 14, 5, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Cuerpo dorado peludo
-    ctx.fillStyle = '#eab308';
-    ctx.beginPath();
-    ctx.arc(0, -2, 13, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Pelaje texturizado
-    ctx.fillStyle = '#ca8a04';
-    for (let i = 0; i < 8; i++) {
-      const fAngle = (i / 8) * Math.PI * 2;
-      const fx = Math.cos(fAngle) * 12;
-      const fy = Math.sin(fAngle) * 12 - 2;
-      ctx.beginPath();
-      ctx.arc(fx, fy, 3.5, 0, Math.PI * 2);
-      ctx.fill();
+    if (Math.random() < 0.35) {
+      spawnParticle(x + (Math.random() * 16 - 8), y + 10, '#00f3ff', 2.5, (Math.random() - 0.5) * 3, Math.random() * 2 + 1);
     }
-
-    // Cabeza
-    ctx.fillStyle = '#fef08a';
+  } else if (activeSkin === 'yeti_gold') {
+    ctx.save();
+    ctx.strokeStyle = '#f59e0b';
+    ctx.fillStyle = 'rgba(251, 191, 36, 0.22)';
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.arc(0, -14, 9, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Corona Dorada mejorada
-    ctx.fillStyle = '#f59e0b';
-    ctx.strokeStyle = '#b45309';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(-8, -21); ctx.lineTo(-8, -27); ctx.lineTo(-4, -23);
-    ctx.lineTo(0, -28); ctx.lineTo(4, -23); ctx.lineTo(8, -27); ctx.lineTo(8, -21);
-    ctx.closePath();
+    ctx.ellipse(0, 8, 20, 26, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.stroke();
+    ctx.restore();
+    if (Math.random() < 0.35) {
+      spawnParticle(x + (Math.random() * 16 - 8), y + 8, '#fbbf24', 3, (Math.random() - 0.5) * 2, -Math.random() * 2);
+    }
+  }
 
-    // Gemas de la corona
-    ctx.fillStyle = '#ef4444';
-    ctx.beginPath(); ctx.arc(0, -25, 1.5, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#3b82f6';
-    ctx.beginPath(); ctx.arc(-5, -24, 1.2, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(5, -24, 1.2, 0, Math.PI * 2); ctx.fill();
-
-    // Ojos rojos brillantes
-    ctx.fillStyle = '#ef4444';
-    ctx.shadowColor = '#ef4444';
-    // ctx.shadowBlur removed for perf
-    ctx.beginPath(); ctx.arc(-3.5, -15, 2, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(3.5, -15, 2, 0, Math.PI * 2); ctx.fill();
-    // ctx.shadowBlur removed for perf
-
-    // Pupilas
-    ctx.fillStyle = '#fbbf24';
-    ctx.beginPath(); ctx.arc(-3.5, -15, 0.8, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(3.5, -15, 0.8, 0, Math.PI * 2); ctx.fill();
-
-    // Boca gruñendo
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath();
-    ctx.arc(0, -10, 4, 0, Math.PI, false);
-    ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.moveTo(-3, -10); ctx.lineTo(-2, -8); ctx.lineTo(-1, -10);
-    ctx.moveTo(1, -10); ctx.lineTo(2, -8); ctx.lineTo(3, -10);
-    ctx.fill();
-
-    // Piernas cortas
-    ctx.fillStyle = '#a16207';
-    ctx.fillRect(-8, 10, 6, 8);
-    ctx.fillRect(2, 10, 6, 8);
-
-  } else if (selectedChar === 'BOARDER') {
+  if (selectedChar === 'BOARDER') {
     // =================================================================
     // SNOWBOARDER — Retro Sprite Mejorado (Estilo Arcade 80s/90s)
     // =================================================================
-    const turnState = player.speedX < -1.2 ? 'LEFT' : (player.speedX > 1.2 ? 'RIGHT' : 'FRONT');
+    const turnState = player.speedX < -0.35 ? 'LEFT' : (player.speedX > 0.35 ? 'RIGHT' : 'FRONT');
     const turnIntensity = Math.abs(player.speedX) / player.maxSpeedX; // 0..1
     const speedRatio = player.speedY / player.maxSpeedY; // 0..1
 
-    // Sombra dinámica en el suelo (escala con velocidad)
-    const shadowScaleX = 16 + turnIntensity * 6;
-    const shadowScaleY = 4 - turnIntensity * 1.5;
-    const shadowOffsetX = (player.speedX / player.maxSpeedX) * 4;
-    ctx.fillStyle = `rgba(15, 23, 42, ${0.12 + speedRatio * 0.08})`;
+    // Sombra dinámica en el suelo (contacto perfecto bajo la tabla)
+    const shadowScaleX = 16 + turnIntensity * 5;
+    const shadowScaleY = 4.5 - turnIntensity * 1.0;
+    const shadowOffsetX = (player.speedX / player.maxSpeedX) * 3;
+    ctx.fillStyle = `rgba(15, 23, 42, ${0.14 + speedRatio * 0.08})`;
     ctx.beginPath();
-    ctx.ellipse(shadowOffsetX, 20, shadowScaleX, shadowScaleY, 0, 0, Math.PI * 2);
+    ctx.ellipse(shadowOffsetX, 22, shadowScaleX, shadowScaleY, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    const retroImg = selectedStyle === 'BANANA' ? retroBananaBoarderImg : retroHumanBoarderImg;
+    // Seleccionar pose direccional 100% individual y limpia
+    let retroImg;
+    if (selectedStyle === 'BANANA') {
+      if (turnState === 'LEFT') retroImg = bananaBoarderLeftImg;
+      else if (turnState === 'RIGHT') retroImg = bananaBoarderRightImg;
+      else retroImg = bananaBoarderDownImg;
+    } else {
+      if (turnState === 'LEFT') retroImg = humanBoarderLeftImg;
+      else if (turnState === 'RIGHT') retroImg = humanBoarderRightImg;
+      else retroImg = humanBoarderDownImg;
+    }
+
     let drawn = false;
+    const imgW = retroImg ? (retroImg.naturalWidth || retroImg.width || 0) : 0;
+    const imgH = retroImg ? (retroImg.naturalHeight || retroImg.height || 0) : 0;
 
-    const imgW = retroImg.naturalWidth || retroImg.width || 0;
-    const imgH = retroImg.naturalHeight || retroImg.height || 0;
-
-    if (activeSkin === 'default' && imgW > 0) {
-      const frameWidth = imgW / 3;
-      const frameHeight = imgH;
-      let frameIndex = 1; // Center (Front)
-      if (turnState === 'LEFT') frameIndex = 2;
-      else if (turnState === 'RIGHT') frameIndex = 0;
-
-      // Tamaño del sprite respetando la proporción real del frame (Agrandado para celular)
-      const frameAspect = frameWidth / frameHeight;
-      const sprH = 64;
-      const sprW = sprH * frameAspect;
+    if (imgW > 0) {
+      // Tamaño óptimo para celular y PC (+10% escala, 66px)
+      const sprH = 66;
+      const sprW = 66;
 
       // Inclinación corporal al girar (lean)
       const leanAngle = (player.speedX / player.maxSpeedX) * 0.18;
 
-      // Micro-bobbing vertical con la velocidad (simulando terreno irregular)
+      // Micro-bobbing vertical con la velocidad
       const bobFreq = 0.22 + speedRatio * 0.12;
-      const bobAmp = 1.0 + speedRatio * 1.2;
+      const bobAmp = 0.8 + speedRatio * 1.0;
       const microBob = Math.sin(player.animFrame * bobFreq * 6) * bobAmp;
 
       // Squash-stretch al aterrizar de un salto
@@ -2160,22 +2486,43 @@ function drawPlayer(x, y) {
         ctx.imageSmoothingEnabled = false;
         ctx.drawImage(
           retroImg,
-          frameIndex * frameWidth, 0, frameWidth, frameHeight,
-          -sprW / 2 + trailOffX, -sprH / 2 + 12 + trailOffY + microBob, sprW, sprH
+          0, 0, imgW, imgH,
+          -sprW / 2 + trailOffX, -sprH / 2 + 13 + trailOffY + microBob, sprW, sprH
         );
         ctx.restore();
       }
 
-      // --- Dibujar sprite principal con crispy pixels ---
+      // --- Dibujar sprite principal con crispy pixels y carving dinámico ---
       ctx.save();
       ctx.imageSmoothingEnabled = false;
       ctx.rotate(leanAngle);
       ctx.scale(squashX, squashY);
       ctx.drawImage(
         retroImg,
-        frameIndex * frameWidth, 0, frameWidth, frameHeight,
-        -sprW / 2, -sprH / 2 + 12 + microBob, sprW, sprH
+        0, 0, imgW, imgH,
+        -sprW / 2, -sprH / 2 + 13 + microBob, sprW, sprH
       );
+
+      // Corona Real Dorada para Skin Yeti Dorado
+      if (activeSkin === 'yeti_gold') {
+        const crownBob = Math.sin((player.animFrame || 0) * 0.18) * 2;
+        ctx.fillStyle = '#f59e0b';
+        ctx.strokeStyle = '#b45309';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-9, -24 + crownBob); ctx.lineTo(-9, -31 + crownBob); ctx.lineTo(-5, -27 + crownBob);
+        ctx.lineTo(0, -33 + crownBob); ctx.lineTo(5, -27 + crownBob); ctx.lineTo(9, -31 + crownBob); ctx.lineTo(9, -24 + crownBob);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(-1, -30 + crownBob, 2, 2);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(-7, -28 + crownBob, 2, 2);
+        ctx.fillRect(5, -28 + crownBob, 2, 2);
+      }
+
       ctx.restore();
 
       // --- Spray de nieve retro al girar fuerte ---
@@ -2183,7 +2530,7 @@ function drawPlayer(x, y) {
         const dir = player.speedX > 0 ? -1 : 1;
         for (let s = 0; s < 2; s++) {
           spawnParticle(
-            x + dir * (10 + Math.random() * 6), y + 16 + Math.random() * 4,
+            x + dir * (10 + Math.random() * 6), y + 18 + Math.random() * 4,
             Math.random() < 0.5 ? '#e2e8f0' : '#f1f5f9',
             1.5 + Math.random() * 1.5,
             dir * (1.5 + Math.random() * 2), -(0.5 + Math.random() * 1.5)
@@ -2380,34 +2727,23 @@ function drawPlayer(x, y) {
       }
       ctx.stroke();
       ctx.restore();
-
-      // Sprite HD como overlay si está cargado
-      if (boarderImg.complete && boarderImg.naturalWidth > 0) {
-        ctx.save();
-        ctx.globalAlpha = 0.35;
-        ctx.beginPath();
-        ctx.arc(0, -4, 18, 0, Math.PI * 2);
-        ctx.clip();
-        ctx.drawImage(boarderImg, -20, -24, 40, 40);
-        ctx.restore();
-      }
     }
 
   } else {
     // =================================================================
     // ESQUIADOR — Retro Sprite Mejorado (Estilo Arcade 80s/90s)
     // =================================================================
-    const turnState = player.speedX < -1.2 ? 'LEFT' : (player.speedX > 1.2 ? 'RIGHT' : 'FRONT');
+    const turnState = player.speedX < -0.35 ? 'LEFT' : (player.speedX > 0.35 ? 'RIGHT' : 'FRONT');
     const turnIntensity = Math.abs(player.speedX) / player.maxSpeedX; // 0..1
     const speedRatio = player.speedY / player.maxSpeedY; // 0..1
 
-    // Sombra dinámica en el suelo (escala con velocidad)
+    // Sombra dinámica en el suelo (contacto perfecto bajo los esquís)
     const shadowScaleX = 14 + turnIntensity * 5;
     const shadowScaleY = 4 - turnIntensity * 1.2;
     const shadowOffsetX = (player.speedX / player.maxSpeedX) * 3;
     ctx.fillStyle = `rgba(15, 23, 42, ${0.12 + speedRatio * 0.08})`;
     ctx.beginPath();
-    ctx.ellipse(shadowOffsetX, 20, shadowScaleX, shadowScaleY, 0, 0, Math.PI * 2);
+    ctx.ellipse(shadowOffsetX, 22, shadowScaleX, shadowScaleY, 0, 0, Math.PI * 2);
     ctx.fill();
 
     const retroImg = selectedStyle === 'BANANA' ? retroBananaSkierImg : retroHumanSkierImg;
@@ -2416,22 +2752,46 @@ function drawPlayer(x, y) {
     const imgW = retroImg.naturalWidth || retroImg.width || 0;
     const imgH = retroImg.naturalHeight || retroImg.height || 0;
 
-    if (activeSkin === 'default' && imgW > 0) {
+    if (imgW > 0) {
       const frameWidth = imgW / 3;
       const frameHeight = imgH;
+      
       let frameIndex = 1; // Center (Front)
-      if (turnState === 'LEFT') frameIndex = 2;
-      else if (turnState === 'RIGHT') frameIndex = 0;
+      let flipX = 1;
 
-      // Tamaño del sprite respetando la proporción real del frame (Agrandado para celular)
+      if (selectedStyle === 'BANANA') {
+        if (turnState === 'LEFT') {
+          frameIndex = 2; // Cuadro lateral
+          flipX = -1; // FLIP horizontal para que mire 100% a la izquierda
+        } else if (turnState === 'RIGHT') {
+          frameIndex = 2; // Cuadro lateral
+          flipX = 1; // Normal a la derecha
+        } else {
+          frameIndex = 1; // Frontal
+          flipX = 1;
+        }
+      } else {
+        if (turnState === 'LEFT') {
+          frameIndex = 0;
+          flipX = 1;
+        } else if (turnState === 'RIGHT') {
+          frameIndex = 2;
+          flipX = 1;
+        } else {
+          frameIndex = 1;
+          flipX = 1;
+        }
+      }
+
+      // Tamaño +10% (64px)
       const frameAspect = frameWidth / frameHeight;
-      const sprH = 58;
+      const sprH = 64;
       const sprW = sprH * frameAspect;
 
       // Inclinación corporal al girar (lean)
       const leanAngle = (player.speedX / player.maxSpeedX) * 0.15;
 
-      // Micro-bobbing vertical con la velocidad (simulando terreno irregular)
+      // Micro-bobbing vertical con la velocidad
       const bobFreq = 0.22 + speedRatio * 0.12;
       const bobAmp = 0.8 + speedRatio * 1.0;
       const microBob = Math.sin(player.animFrame * bobFreq * 6) * bobAmp;
@@ -2452,24 +2812,46 @@ function drawPlayer(x, y) {
         const trailOffX = -(player.speedX * 0.6);
         const trailOffY = 2;
         ctx.imageSmoothingEnabled = false;
+        ctx.scale(flipX, 1);
         ctx.drawImage(
           retroImg,
           frameIndex * frameWidth, 0, frameWidth, frameHeight,
-          -sprW / 2 + trailOffX, -sprH / 2 + 12 + trailOffY + microBob, sprW, sprH
+          (-sprW / 2) * flipX + trailOffX, -sprH / 2 + 13 + trailOffY + microBob, sprW * flipX, sprH
         );
         ctx.restore();
       }
 
-      // --- Dibujar sprite principal con crispy pixels ---
+      // --- Dibujar sprite principal con crispy pixels y flip horizontal ---
       ctx.save();
       ctx.imageSmoothingEnabled = false;
       ctx.rotate(leanAngle);
-      ctx.scale(squashX, squashY);
+      ctx.scale(squashX * flipX, squashY);
       ctx.drawImage(
         retroImg,
         frameIndex * frameWidth, 0, frameWidth, frameHeight,
-        -sprW / 2, -sprH / 2 + 12 + microBob, sprW, sprH
+        -sprW / 2, -sprH / 2 + 13 + microBob, sprW, sprH
       );
+
+      // Corona Real Dorada para Skin Yeti Dorado
+      if (activeSkin === 'yeti_gold') {
+        const crownBob = Math.sin((player.animFrame || 0) * 0.18) * 2;
+        ctx.fillStyle = '#f59e0b';
+        ctx.strokeStyle = '#b45309';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(-9, -24 + crownBob); ctx.lineTo(-9, -31 + crownBob); ctx.lineTo(-5, -27 + crownBob);
+        ctx.lineTo(0, -33 + crownBob); ctx.lineTo(5, -27 + crownBob); ctx.lineTo(9, -31 + crownBob); ctx.lineTo(9, -24 + crownBob);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#ef4444';
+        ctx.fillRect(-1, -30 + crownBob, 2, 2);
+        ctx.fillStyle = '#38bdf8';
+        ctx.fillRect(-7, -28 + crownBob, 2, 2);
+        ctx.fillRect(5, -28 + crownBob, 2, 2);
+      }
+
       ctx.restore();
 
       // --- Spray de nieve retro al girar fuerte ---
@@ -2477,7 +2859,7 @@ function drawPlayer(x, y) {
         const dir = player.speedX > 0 ? -1 : 1;
         for (let s = 0; s < 2; s++) {
           spawnParticle(
-            x + dir * (10 + Math.random() * 6), y + 16 + Math.random() * 4,
+            x + dir * (10 + Math.random() * 6), y + 18 + Math.random() * 4,
             Math.random() < 0.5 ? '#e2e8f0' : '#f1f5f9',
             1.5 + Math.random() * 1.5,
             dir * (1.5 + Math.random() * 2), -(0.5 + Math.random() * 1.5)
@@ -2929,45 +3311,58 @@ function drawYeti(x, y) {
     ctx.fill();
   }
 
-  // 7. Cartel distintivo superior "👹 YETI" para legibilidad absoluta
+  // 7. Cartel distintivo superior "YETI" para legibilidad absoluta
   ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+  ctx.strokeStyle = '#ef4444';
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.roundRect(-26, -48, 52, 18, 5);
+  ctx.roundRect(-22, -48, 44, 18, 5);
   ctx.fill();
+  ctx.stroke();
   ctx.fillStyle = '#ff4757';
   ctx.font = 'bold 11px "Space Grotesk", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText('👹 YETI', 0, -39);
+  ctx.fillText('YETI', 0, -39);
 
   ctx.restore();
 }
 
-// Efecto decorativo de tormenta de nieve
+// Efecto decorativo de tormenta y ventisca de nieve en primer plano
 let weatherSnowflakes = [];
-for (let s = 0; s < 30; s++) {
+for (let s = 0; s < 36; s++) {
   weatherSnowflakes.push({
-    x: Math.random() * width,
-    y: Math.random() * height,
-    speedY: 2 + Math.random() * 2,
-    speedX: -1 + Math.random() * 1.5,
-    size: 1 + Math.random() * 2.5
+    x: Math.random() * (width || 400),
+    y: Math.random() * (height || 600),
+    speedY: 2 + Math.random() * 2.5,
+    speedX: -0.5 + Math.random() * 1.0,
+    size: 1.0 + Math.random() * 2.5,
+    opacity: 0.25 + Math.random() * 0.45,
+    sway: Math.random() * Math.PI * 2
   });
 }
 
 function drawWeatherSnow() {
-  ctx.fillStyle = '#ffffff';
+  const isBlizzard = yeti.active && gameState === STATES.PLAYING;
+  const blizzardSpeedMult = isBlizzard ? 2.2 : 1.0;
+  const windX = (player.speedX || 0) * 0.35;
+
+  ctx.save();
   weatherSnowflakes.forEach(sf => {
+    sf.sway = (sf.sway || 0) + 0.035;
+    const dynamicAlpha = isBlizzard ? Math.min(0.9, (sf.opacity || 0.4) * 1.6) : (sf.opacity || 0.4);
+    
+    ctx.fillStyle = `rgba(255, 255, 255, ${dynamicAlpha})`;
     ctx.beginPath();
-    ctx.arc(sf.x, sf.y, sf.size, 0, Math.PI * 2);
+    ctx.arc(sf.x, sf.y, sf.size * (isBlizzard ? 1.25 : 1.0), 0, Math.PI * 2);
     ctx.fill();
 
     // Mover copos de nieve
-    sf.y += sf.speedY;
-    sf.x += sf.speedX;
+    sf.y += (sf.speedY + (player.speedY || 4) * 0.15) * blizzardSpeedMult;
+    sf.x += (sf.speedX + Math.sin(sf.sway) * 0.7 - windX) * blizzardSpeedMult;
 
     // Reposicionar si salen de la pantalla
-    if (sf.y > height) {
+    if (sf.y > height + 10) {
       sf.y = -10;
       sf.x = Math.random() * width;
     }
@@ -2978,6 +3373,7 @@ function drawWeatherSnow() {
       sf.x = -10;
     }
   });
+  ctx.restore();
 }
 
 // ==========================================================================
