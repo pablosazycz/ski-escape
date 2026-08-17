@@ -1,6 +1,7 @@
 import { ads } from './ads.js';
 import { sound } from './sound.js';
 import { security } from './security.js';
+import { t, getLanguage, setLanguage, toggleLanguage, applyTranslations } from './i18n.js';
 import { App } from '@capacitor/app';
 import { Haptics, ImpactStyle, NotificationType } from '@capacitor/haptics';
 
@@ -203,7 +204,7 @@ function updateQuestProgress(questId, amount = 1) {
     q.current = Math.min(q.target, (q.current || 0) + amount);
     if (q.current >= q.target) {
       q.completed = true;
-      spawnFloatingText(player.x, player.y - 50, '🎯 ¡MISIÓN COMPLETADA!', '#fbbf24', 15);
+      spawnFloatingText(player.x, player.y - 50, t('quest_complete_text'), '#fbbf24', 15);
       sound.playReward();
       triggerHaptic('success');
     }
@@ -220,20 +221,29 @@ function renderQuestsUI() {
     const card = document.createElement('div');
     card.className = `quest-card ${q.completed ? 'completed' : ''}`;
     const pct = Math.min(100, Math.round(((q.current || 0) / q.target) * 100));
+
+    let qTitle = q.title;
+    if (q.id === 'jumps_3') qTitle = t('quest_jumps');
+    else if (q.id === 'coins_15') qTitle = t('quest_coins');
+    else if (q.id === 'close_5') qTitle = t('quest_close');
+
+    const qRewardLabel = t('quest_reward_label');
+    const claimText = t('quest_claim');
+    const claimedText = t('quest_claimed');
     
     card.innerHTML = `
       <div class="quest-info">
-        <span class="quest-title">${q.title}</span>
-        <span class="quest-reward">+${q.reward} 🪙 Recompensa (${q.current || 0}/${q.target})</span>
+        <span class="quest-title">${qTitle}</span>
+        <span class="quest-reward">+${q.reward} 🪙 ${qRewardLabel} (${q.current || 0}/${q.target})</span>
         <div class="quest-progress-wrap">
           <div class="quest-progress-fill" style="width: ${pct}%;"></div>
         </div>
       </div>
       <div>
         ${q.claimed 
-          ? '<span class="text-muted" style="font-size:0.75rem; font-weight:700;">✅ RECLAMADO</span>' 
+          ? `<span class="text-muted" style="font-size:0.75rem; font-weight:700;">${claimedText}</span>` 
           : (q.completed 
-              ? `<button class="btn btn-reward quest-claim-btn" data-qid="${q.id}">RECLAMAR</button>` 
+              ? `<button class="btn btn-reward quest-claim-btn" data-qid="${q.id}">${claimText}</button>` 
               : `<span class="text-muted" style="font-size:0.75rem;">${pct}%</span>`)}
       </div>
     `;
@@ -533,6 +543,17 @@ function setDiffActive(activeBtn) {
 
 // Delegación global de todos los botones y menús principales
 document.addEventListener('click', (e) => {
+  // Selector de Idioma (ES / EN)
+  const lBtn = e.target.closest('#langBtn');
+  if (lBtn) {
+    toggleLanguage();
+    try { sound.playClick(); } catch (err) {}
+    triggerHaptic('light');
+    updateShopUI();
+    renderQuestsUI();
+    return;
+  }
+
   // Selector de Personaje (Esquiador / Snowboard)
   const charBtn = e.target.closest('#charSkierBtn, #charBoarderBtn');
   if (charBtn) {
@@ -664,6 +685,7 @@ freeCoinsAdBtn.addEventListener('click', () => {
 
 function updateShopUI() {
   updateCoinsUI();
+  applyTranslations();
   document.querySelectorAll('.skin-card').forEach(card => {
     const skinKey = card.getAttribute('data-skin');
     const statusText = card.querySelector('.skin-status');
@@ -677,11 +699,11 @@ function updateShopUI() {
     if (isPowerUp) {
       if (isUnlocked) {
         card.classList.add('active');
-        if (priceText) priceText.innerText = 'Desbloqueado';
-        if (statusText) statusText.innerText = 'Activo';
+        if (priceText) priceText.innerText = t('skin_unlocked');
+        if (statusText) statusText.innerText = t('skin_active');
         if (cardBtn) {
           cardBtn.className = 'btn btn-sm btn-secondary disabled';
-          cardBtn.innerText = '✅ Activo';
+          cardBtn.innerText = `✅ ${t('skin_active')}`;
           cardBtn.disabled = true;
         }
       } else {
@@ -690,7 +712,7 @@ function updateShopUI() {
         if (priceText) priceText.innerText = `${defaultPrice} 🪙`;
         if (cardBtn) {
           cardBtn.className = 'btn btn-sm btn-primary buy-skin-btn';
-          cardBtn.innerText = 'Comprar';
+          cardBtn.innerText = t('skin_buy');
           cardBtn.disabled = false;
           cardBtn.setAttribute('data-skin', skinKey);
         }
@@ -698,20 +720,20 @@ function updateShopUI() {
     } else {
       if (isActive) {
         card.classList.add('active');
-        if (statusText) statusText.innerText = 'En Uso';
-        if (priceText) priceText.innerText = 'Equipado';
+        if (statusText) statusText.innerText = t('skin_in_use');
+        if (priceText) priceText.innerText = t('skin_equipped');
         if (cardBtn) {
           cardBtn.className = 'btn btn-sm btn-secondary select-skin-btn disabled';
-          cardBtn.innerText = 'Equipado';
+          cardBtn.innerText = t('skin_equipped');
           cardBtn.disabled = true;
         }
       } else if (isUnlocked) {
         card.classList.remove('active');
-        if (statusText) statusText.innerText = 'Desbloqueado';
-        if (priceText) priceText.innerText = 'Comprado';
+        if (statusText) statusText.innerText = t('skin_unlocked');
+        if (priceText) priceText.innerText = t('skin_unlocked');
         if (cardBtn) {
           cardBtn.className = 'btn btn-sm btn-primary select-skin-btn';
-          cardBtn.innerText = 'Usar';
+          cardBtn.innerText = t('skin_use');
           cardBtn.disabled = false;
           cardBtn.setAttribute('data-skin', skinKey);
         }
@@ -721,7 +743,7 @@ function updateShopUI() {
         if (priceText) priceText.innerText = `${defaultPrice} 🪙`;
         if (cardBtn) {
           cardBtn.className = 'btn btn-sm btn-primary buy-skin-btn';
-          cardBtn.innerText = 'Comprar';
+          cardBtn.innerText = t('skin_buy');
           cardBtn.disabled = false;
           cardBtn.setAttribute('data-skin', skinKey);
         }
@@ -1416,7 +1438,7 @@ function updateGameLogic() {
       yeti.animFrame += 0.2;
 
       if (yeti.eatingTimer <= 0) {
-        triggerGameOver("El Yeti te atrapó y te devoró.", true);
+        triggerGameOver(t('gameover_yeti'), true);
       }
     }
   }
@@ -1578,7 +1600,7 @@ function updateGameLogic() {
             
             setTimeout(() => {
               if (gameState === STATES.CRASHED) {
-                triggerGameOver(obs.type === 'TREE' ? "Chocaste contra un pino." : "Chocaste contra una roca.", false);
+                triggerGameOver(obs.type === 'TREE' ? t('gameover_tree') : t('gameover_rock'), false);
               }
             }, 350);
           }
@@ -1708,6 +1730,7 @@ function triggerGameOver(reason, eatenByYeti = false) {
   }
 
   // Llenar datos de UI
+  if (gameOverTitle) gameOverTitle.innerText = t('gameover_title');
   gameOverReason.innerText = reason;
   finalScoreVal.innerText = `${score}m`;
   currentRecordVal.innerText = `${highScore}m`;
@@ -1715,6 +1738,7 @@ function triggerGameOver(reason, eatenByYeti = false) {
   // Badge de nuevo récord
   const newRecordBadge = document.getElementById('newRecordBadge');
   if (newRecordBadge) {
+    newRecordBadge.innerText = t('new_record_text');
     newRecordBadge.style.display = isNewRecord ? 'inline-block' : 'none';
   }
 
@@ -1728,11 +1752,15 @@ function triggerGameOver(reason, eatenByYeti = false) {
   if (player.hasRevived || eatenByYeti) {
     reviveBtn.classList.add('disabled');
     reviveBtn.disabled = true;
-    if (reviveLabel) reviveLabel.innerText = eatenByYeti ? "NO SE PUEDE REVIVIR DEL YETI" : "YA HAS REVIVIDO";
+    if (reviveLabel) {
+      reviveLabel.innerText = eatenByYeti 
+        ? (getLanguage() === 'EN' ? "CANNOT REVIVE FROM YETI" : "NO SE PUEDE REVIVIR DEL YETI")
+        : (getLanguage() === 'EN' ? "ALREADY REVIVED" : "YA HAS REVIVIDO");
+    }
   } else {
     reviveBtn.classList.remove('disabled');
     reviveBtn.disabled = false;
-    if (reviveLabel) reviveLabel.innerText = "REVIVIR (Ver Video)";
+    if (reviveLabel) reviveLabel.innerText = t('gameover_revive');
   }
 
   // Mostrar el menú con shake si fue comido
@@ -3432,3 +3460,6 @@ document.addEventListener('pointerdown', (e) => {
 
   ripple.addEventListener('animationend', () => ripple.remove());
 });
+
+// Inicializar traducciones de la interfaz según el idioma del dispositivo
+applyTranslations();
