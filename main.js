@@ -131,6 +131,12 @@ document.addEventListener('click', (e) => {
   }
 });
 
+// Detección global de dispositivo móvil (se usa para optimizar rendimiento)
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+const MAX_SKI_TRACKS = isMobile ? 150 : 400;
+const MAX_PARTICLES = isMobile ? 60 : 200;
+let _trackFrameSkip = 0; // Throttle de tracks en mobile
+
 // Configuración de resolución responsiva
 let width = canvas.clientWidth;
 let height = canvas.clientHeight;
@@ -139,7 +145,7 @@ function resizeCanvas() {
   const container = document.getElementById('gameContainer');
   width = container.clientWidth;
   height = container.clientHeight;
-  const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  // isMobile ya definido como constante global
   const maxDpr = isMobile ? 1.0 : 2.0;
   const dpr = Math.min(window.devicePixelRatio || 1, maxDpr); // Optimizado para no reventar la GPU de celulares
   canvas.width = width * dpr;
@@ -1110,8 +1116,17 @@ function revivePlayer() {
   ads.hideBanner();
 }
 
-// Bucle de física y dibujo
-function update() {
+// Bucle de física y dibujo con deltaTime para framerate independiente
+let _lastFrameTime = 0;
+let _frameCount = 0;
+function update(timestamp) {
+  if (!_lastFrameTime) _lastFrameTime = timestamp;
+  const deltaMs = timestamp - _lastFrameTime;
+  _lastFrameTime = timestamp;
+  _frameCount++;
+
+  // En mobile, si el frame tardó menos de 30fps (33ms), seguimos normal.
+  // Si tardó más, no acumulamos lógica extra (evita espirales de lag).
   if (gameState === STATES.PLAYING || gameState === STATES.JUMPING || gameState === STATES.CRASHED || gameState === STATES.EATEN) {
     updateGameLogic();
   }
@@ -1241,23 +1256,26 @@ function updateGameLogic() {
         }
       }
     } else {
-      // Dejar huellas en la nieve (solo en el suelo)
-      if (selectedChar === 'BOARDER') {
-        // El snowboard deja una huella única tallada más ancha en el centro
-        addTrack(player.x, player.y, 3.5, 0.35);
-      } else {
-        // El esquiador deja dos huellas paralelas
-        if (Math.abs(player.speedX) > 0.5) {
-          addTrack(player.x - 4, player.y);
-          addTrack(player.x + 4, player.y);
+      // Dejar huellas en la nieve (solo en el suelo) — throttleado en mobile
+      _trackFrameSkip++;
+      const shouldAddTrack = !isMobile || (_trackFrameSkip % 3 === 0);
+      if (shouldAddTrack) {
+        if (selectedChar === 'BOARDER') {
+          addTrack(player.x, player.y, 3.5, 0.35);
         } else {
-          addTrack(player.x - 3, player.y);
-          addTrack(player.x + 3, player.y);
+          if (Math.abs(player.speedX) > 0.5) {
+            addTrack(player.x - 4, player.y);
+            addTrack(player.x + 4, player.y);
+          } else {
+            addTrack(player.x - 3, player.y);
+            addTrack(player.x + 3, player.y);
+          }
         }
       }
 
-      // Spray de nieve al girar fuerte
-      if (Math.abs(player.speedX) > 2.5 && Math.random() < 0.4) {
+      // Spray de nieve al girar fuerte (reducido en mobile)
+      const sprayChance = isMobile ? 0.15 : 0.4;
+      if (Math.abs(player.speedX) > 2.5 && Math.random() < sprayChance) {
         spawnParticle(player.x, player.y, '#ffffff', 2, -player.speedX * 0.5 + (Math.random() * 2 - 1), -1);
       }
     }
@@ -1689,6 +1707,8 @@ function spawnObstacle(yCoord) {
 }
 
 function spawnParticle(x, y, color, size, vx, vy, decay = 0.02) {
+  // Limitar partículas en mobile para evitar acumulación
+  if (particles.length >= MAX_PARTICLES) return;
   particles.push({
     x,
     y,
@@ -1702,6 +1722,8 @@ function spawnParticle(x, y, color, size, vx, vy, decay = 0.02) {
 }
 
 function addTrack(x, y, size = 1.5, alpha = 0.25) {
+  // Limitar cantidad de tracks para evitar acumulación en mobile
+  if (skiTracks.length >= MAX_SKI_TRACKS) return;
   skiTracks.push({
     x,
     y,
@@ -1942,13 +1964,13 @@ function drawObstacle(x, y, obs) {
       ctx.fillStyle = '#3d1e08';
       ctx.fillRect(0, -2, obs.size * 0.08, obs.size * 0.4);
 
-      // 4 Capas de ramas estilizadas
-      const layers = 4;
+      // Capas de ramas estilizadas (reducidas en mobile para rendimiento)
+      const layers = isMobile ? 2 : 4;
       for (let i = 0; i < layers; i++) {
         const factor = (layers - i) / layers;
         const w = obs.size * 0.55 * factor;
         const h = obs.size * 0.38;
-        const offsetY = -obs.size * 0.22 * i;
+        const offsetY = -obs.size * 0.22 * i * (isMobile ? 2 : 1);
 
         // Degradado de verde según profundidad
         ctx.fillStyle = i === 0 ? '#064e3b' : i === 1 ? '#047857' : i === 2 ? '#10b981' : '#34d399';
@@ -1960,24 +1982,34 @@ function drawObstacle(x, y, obs) {
         ctx.closePath();
         ctx.fill();
 
-        // Sombra propia en el lado derecho de la rama
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
-        ctx.beginPath();
-        ctx.moveTo(0, offsetY - h);
-        ctx.lineTo(0, offsetY);
-        ctx.lineTo(w, offsetY);
-        ctx.closePath();
-        ctx.fill();
+        if (!isMobile) {
+          // Sombra propia en el lado derecho de la rama (solo PC)
+          ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
+          ctx.beginPath();
+          ctx.moveTo(0, offsetY - h);
+          ctx.lineTo(0, offsetY);
+          ctx.lineTo(w, offsetY);
+          ctx.closePath();
+          ctx.fill();
+        }
 
-        // Nieve esponjosa sobre las ramas
-        ctx.fillStyle = '#f8fafc';
-        ctx.beginPath();
-        ctx.moveTo(0, offsetY - h);
-        ctx.lineTo(-w * 0.35, offsetY - h * 0.6);
-        ctx.quadraticCurveTo(-w * 0.1, offsetY - h * 0.4, 0, offsetY - h * 0.5);
-        ctx.quadraticCurveTo(w * 0.1, offsetY - h * 0.4, w * 0.35, offsetY - h * 0.6);
-        ctx.closePath();
-        ctx.fill();
+        // Nieve esponjosa sobre las ramas (simplificada en mobile)
+        if (!isMobile) {
+          ctx.fillStyle = '#f8fafc';
+          ctx.beginPath();
+          ctx.moveTo(0, offsetY - h);
+          ctx.lineTo(-w * 0.35, offsetY - h * 0.6);
+          ctx.quadraticCurveTo(-w * 0.1, offsetY - h * 0.4, 0, offsetY - h * 0.5);
+          ctx.quadraticCurveTo(w * 0.1, offsetY - h * 0.4, w * 0.35, offsetY - h * 0.6);
+          ctx.closePath();
+          ctx.fill();
+        } else if (i === layers - 1) {
+          // En mobile, solo una capa de nieve simple en la punta
+          ctx.fillStyle = '#f8fafc';
+          ctx.beginPath();
+          ctx.arc(0, offsetY - h * 0.7, w * 0.3, 0, Math.PI * 2);
+          ctx.fill();
+        }
       }
 
       // Estrella / Copo en la punta (variante 1)
@@ -2126,8 +2158,7 @@ function drawObstacle(x, y, obs) {
       const coinW = obs.size * 0.5 * coinScale;
 
       // Glow resplandeciente
-      ctx.shadowColor = '#ffad00';
-      // ctx.shadowBlur removed for perf
+      // shadowColor/shadowBlur removed for mobile perf
 
       // Anillo exterior
       ctx.fillStyle = '#d97706';
@@ -2147,7 +2178,7 @@ function drawObstacle(x, y, obs) {
       ctx.ellipse(0, -4, coinW * 0.7, obs.size * 0.35, 0, 0, Math.PI * 2);
       ctx.fill();
 
-      // ctx.shadowBlur removed for perf
+      // shadow removed for perf
 
       // Símbolo "$"
       if (coinScale > 0.55) {
@@ -2169,8 +2200,7 @@ function drawObstacle(x, y, obs) {
       const floatY = Math.sin(obs.floatOffset) * 3 - 6;
 
       // Glow holográfico cian
-      ctx.shadowColor = '#00f3ff';
-      // ctx.shadowBlur removed for perf
+      // shadowColor/shadowBlur removed for mobile perf
 
       // Orbe exterior
       ctx.fillStyle = 'rgba(0, 243, 255, 0.18)';
@@ -2188,7 +2218,7 @@ function drawObstacle(x, y, obs) {
       ctx.ellipse(0, floatY, obs.size * 0.7, obs.size * 0.25, obs.floatOffset, 0, Math.PI * 2);
       ctx.stroke();
 
-      // ctx.shadowBlur removed for perf
+      // shadow removed for perf
 
       // Ícono de escudo
       ctx.font = '14px sans-serif';
@@ -2207,8 +2237,7 @@ function drawObstacle(x, y, obs) {
       const floatY = Math.sin(obs.floatOffset) * 3 - 6;
 
       // Glow púrpura
-      ctx.shadowColor = '#c084fc';
-      // ctx.shadowBlur removed for perf
+      // shadowColor/shadowBlur removed for mobile perf
 
       // Orbe exterior
       ctx.fillStyle = 'rgba(168, 85, 247, 0.18)';
@@ -2226,7 +2255,7 @@ function drawObstacle(x, y, obs) {
       ctx.ellipse(0, floatY, obs.size * 0.7, obs.size * 0.25, -obs.floatOffset, 0, Math.PI * 2);
       ctx.stroke();
 
-      // ctx.shadowBlur removed for perf
+      // shadow removed for perf
 
       // Ícono de imán
       ctx.font = '14px sans-serif';
@@ -2254,8 +2283,7 @@ function drawObstacle(x, y, obs) {
       ctx.fillStyle = 'rgba(0, 243, 255, 0.15)';
       ctx.strokeStyle = '#00f3ff';
       ctx.lineWidth = 2;
-      ctx.shadowColor = '#00f3ff';
-      // ctx.shadowBlur removed for perf
+      // shadowColor/shadowBlur removed for mobile perf
       ctx.beginPath();
       ctx.moveTo(-obs.size * 0.6, 0);
       ctx.lineTo(-obs.size * 0.4, -obs.size * 0.35);
@@ -2264,7 +2292,7 @@ function drawObstacle(x, y, obs) {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
-      // ctx.shadowBlur removed for perf
+      // shadow removed for perf
 
       // Borde de despegue (neón)
       ctx.strokeStyle = '#38bdf8';
@@ -2353,18 +2381,20 @@ function drawPlayer(x, y) {
   // Detección de tema de Skin activa
   const activeSkin = playerProfile.activeSkin || 'default';
 
-  // Efecto de partículas pasivas para Skins especiales
-  if (activeSkin === 'fire' && Math.random() < 0.5) {
+  // Efecto de partículas pasivas para Skins especiales (reducido en mobile)
+  const skinParticleChance = isMobile ? 0.15 : 0.5;
+  if (activeSkin === 'fire' && Math.random() < skinParticleChance) {
     spawnParticle(x + (Math.random() * 12 - 6), y + 10, '#f97316', 2.5, Math.random() * 2 - 1, Math.random() * 2 + 1);
-  } else if (activeSkin === 'yeti_gold' && Math.random() < 0.3) {
+  } else if (activeSkin === 'yeti_gold' && Math.random() < (isMobile ? 0.1 : 0.3)) {
     spawnParticle(x + (Math.random() * 12 - 6), y + 10, '#eab308', 2.5, Math.random() * 2 - 1, Math.random() * 2 + 1);
   }
 
-  // Partículas de nieve al girar (mejorado para ambos personajes)
-  if (gameState === STATES.PLAYING && Math.abs(player.speedX) > 1.5 && Math.random() < 0.6) {
+  // Partículas de nieve al girar (reducido en mobile)
+  const turnSprayChance = isMobile ? 0.25 : 0.6;
+  if (gameState === STATES.PLAYING && Math.abs(player.speedX) > 1.5 && Math.random() < turnSprayChance) {
     const sprayDir = player.speedX > 0 ? -1 : 1;
     spawnParticle(x + sprayDir * 8, y + 12, '#e2e8f0', 1.5 + Math.random(), sprayDir * (1 + Math.random()), -Math.random() * 2);
-    if (Math.random() < 0.3) {
+    if (!isMobile && Math.random() < 0.3) {
       spawnParticle(x + sprayDir * 6, y + 10, '#cbd5e1', 1 + Math.random(), sprayDir * (0.5 + Math.random()), -Math.random() * 1.5);
     }
   }
@@ -2377,15 +2407,19 @@ function drawPlayer(x, y) {
     const rx = 21 + shieldPulse * 0.5;
     const ry = 28 + shieldPulse;
 
-    ctx.shadowColor = '#00f3ff';
-    // ctx.shadowBlur removed for perf
+    // shadowColor/shadowBlur removed for mobile perf
 
-    // Relleno de energía con degradado radial
-    const gradient = ctx.createRadialGradient(0, centerY, 4, 0, centerY, ry);
-    gradient.addColorStop(0, 'rgba(0, 243, 255, 0.04)');
-    gradient.addColorStop(0.7, 'rgba(0, 243, 255, 0.15)');
-    gradient.addColorStop(1, 'rgba(0, 243, 255, 0.35)');
-    ctx.fillStyle = gradient;
+    if (isMobile) {
+      // Relleno sólido simple en mobile (sin gradiente radial)
+      ctx.fillStyle = 'rgba(0, 243, 255, 0.18)';
+    } else {
+      // Relleno de energía con degradado radial (solo PC)
+      const gradient = ctx.createRadialGradient(0, centerY, 4, 0, centerY, ry);
+      gradient.addColorStop(0, 'rgba(0, 243, 255, 0.04)');
+      gradient.addColorStop(0.7, 'rgba(0, 243, 255, 0.15)');
+      gradient.addColorStop(1, 'rgba(0, 243, 255, 0.35)');
+      ctx.fillStyle = gradient;
+    }
 
     ctx.beginPath();
     ctx.ellipse(0, centerY, rx, ry, 0, 0, Math.PI * 2);
@@ -2398,12 +2432,14 @@ function drawPlayer(x, y) {
     ctx.ellipse(0, centerY, rx, ry, 0, 0, Math.PI * 2);
     ctx.stroke();
 
-    // Anillo de brillo interno
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.ellipse(0, centerY, rx - 3, ry - 3, 0, 0, Math.PI * 2);
-    ctx.stroke();
+    if (!isMobile) {
+      // Anillo de brillo interno (solo PC)
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.ellipse(0, centerY, rx - 3, ry - 3, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
 
     ctx.restore();
   }
@@ -2419,7 +2455,7 @@ function drawPlayer(x, y) {
     ctx.fill();
     ctx.stroke();
     ctx.restore();
-    if (Math.random() < 0.35) {
+    if (Math.random() < (isMobile ? 0.12 : 0.35)) {
       spawnParticle(x + (Math.random() * 16 - 8), y + 10, '#f97316', 3, (Math.random() - 0.5) * 2, Math.random() * 2 + 1);
     }
   } else if (activeSkin === 'cyber') {
@@ -2505,8 +2541,8 @@ function drawPlayer(x, y) {
         player._landingTimer--;
       }
 
-      // --- Afterimage trail retro (estela tipo 80s/90s) ---
-      if (gameState === STATES.PLAYING && turnIntensity > 0.3) {
+      // --- Afterimage trail retro (estela tipo 80s/90s) --- Omitido en mobile
+      if (!isMobile && gameState === STATES.PLAYING && turnIntensity > 0.3) {
         ctx.save();
         ctx.globalAlpha = 0.15 + turnIntensity * 0.1;
         const trailOffX = -(player.speedX * 0.6);
@@ -2554,9 +2590,10 @@ function drawPlayer(x, y) {
       ctx.restore();
 
       // --- Spray de nieve retro al girar fuerte ---
-      if (gameState === STATES.PLAYING && turnIntensity > 0.4 && Math.random() < 0.7) {
+      if (gameState === STATES.PLAYING && turnIntensity > 0.4 && Math.random() < (isMobile ? 0.25 : 0.7)) {
         const dir = player.speedX > 0 ? -1 : 1;
-        for (let s = 0; s < 2; s++) {
+        const sprayCount = isMobile ? 1 : 2;
+        for (let s = 0; s < sprayCount; s++) {
           spawnParticle(
             x + dir * (10 + Math.random() * 6), y + 18 + Math.random() * 4,
             Math.random() < 0.5 ? '#e2e8f0' : '#f1f5f9',
@@ -3117,8 +3154,8 @@ function drawPlayer(x, y) {
       ctx.stroke();
       ctx.restore();
 
-      // Sprite HD como overlay sutil
-      if (skierImg.complete && skierImg.naturalWidth > 0) {
+      // Sprite HD como overlay sutil (omitido en mobile por ctx.clip costoso)
+      if (!isMobile && skierImg.complete && skierImg.naturalWidth > 0) {
         ctx.save();
         ctx.globalAlpha = 0.3;
         ctx.beginPath();
@@ -3145,13 +3182,12 @@ function drawPlayer(x, y) {
     }
 
     // Cartel Neón "🚀 TURBO!" con glow
-    ctx.shadowColor = '#00f3ff';
-    // ctx.shadowBlur removed for perf
+    // shadowColor/shadowBlur removed for mobile perf
     ctx.fillStyle = 'rgba(0, 243, 255, 0.92)';
     ctx.beginPath();
     ctx.roundRect(-28, -34, 56, 15, 5);
     ctx.fill();
-    // ctx.shadowBlur removed for perf
+    // shadow removed for perf
     ctx.fillStyle = '#020617';
     ctx.font = 'bold 9px "Space Grotesk", sans-serif';
     ctx.textAlign = 'center';
@@ -3191,14 +3227,15 @@ function drawYeti(x, y) {
     }
   }
 
-  // 1. DIBUJAR SPRITE BITMAP HD DEL YETI
+  // 1. DIBUJAR SPRITE BITMAP HD DEL YETI (clip omitido en mobile)
   if (yetiImg.complete && yetiImg.naturalWidth > 0) {
     ctx.save();
-    ctx.shadowColor = '#ef4444';
-    // ctx.shadowBlur removed for perf
-    ctx.beginPath();
-    ctx.arc(0, -2, 32, 0, Math.PI * 2);
-    ctx.clip();
+    // shadowColor/shadowBlur removed for mobile perf
+    if (!isMobile) {
+      ctx.beginPath();
+      ctx.arc(0, -2, 32, 0, Math.PI * 2);
+      ctx.clip();
+    }
     ctx.drawImage(yetiImg, -36, -38, 72, 72);
     ctx.restore();
   } else {
@@ -3288,13 +3325,12 @@ function drawYeti(x, y) {
   } else {
     // Ojos rojos brillantes
     ctx.fillStyle = '#ef4444';
-    ctx.shadowColor = '#ef4444';
-    // ctx.shadowBlur removed for perf
+    // shadowColor/shadowBlur removed for mobile perf
     ctx.beginPath();
     ctx.arc(-6, -9, 4.5, 0, Math.PI * 2);
     ctx.arc(6, -9, 4.5, 0, Math.PI * 2);
     ctx.fill();
-    // ctx.shadowBlur removed for perf // Reset sombra
+    // shadow removed for perf
 
     // Pupilas amarillas malignas
     ctx.fillStyle = '#ffad00';
@@ -3358,7 +3394,8 @@ function drawYeti(x, y) {
 
 // Efecto decorativo de tormenta y ventisca de nieve en primer plano
 let weatherSnowflakes = [];
-for (let s = 0; s < 36; s++) {
+const snowflakeCount = isMobile ? 12 : 36;
+for (let s = 0; s < snowflakeCount; s++) {
   weatherSnowflakes.push({
     x: Math.random() * (width || 400),
     y: Math.random() * (height || 600),
@@ -3432,8 +3469,7 @@ function updateAndDrawFloatingTexts(cameraY) {
     ctx.save();
     ctx.globalAlpha = ft.alpha;
     ctx.fillStyle = ft.color;
-    ctx.shadowColor = ft.color;
-    // ctx.shadowBlur removed for perf
+    // shadowColor/shadowBlur removed for mobile perf
     ctx.font = `bold ${ft.size}px "Space Grotesk", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
