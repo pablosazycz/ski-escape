@@ -1283,7 +1283,23 @@ function updateGameLogic() {
     // Calcular score (con multiplicador de dificultad + bonus de skin + bonus de trucos)
     const skinScoreMult = player.isMidas ? 1.15 : 1.0;
     score = Math.floor((player.y / 10) * currentDiff.mult * skinScoreMult) + (player.trickBonus || 0);
-    distanceVal.innerText = `${score}m`;
+
+    // Throttle DOM updates: actualizar cada 6 frames para no forzar repaints continuos
+    if (_frameCount % 6 === 0) {
+      distanceVal.innerText = `${score}m`;
+
+      // Velocidad en km/h con color dinámico
+      const speedKmh = Math.floor(player.speedY * 12);
+      speedVal.innerText = `${speedKmh}`;
+      // Color: azul → naranja → rojo según velocidad
+      if (speedKmh < 55) {
+        speedVal.style.color = '#f1f5f9';
+      } else if (speedKmh < 80) {
+        speedVal.style.color = '#fbbf24';
+      } else {
+        speedVal.style.color = '#ef4444';
+      }
+    }
 
     // Celebración en vivo al superar el récord durante la carrera
     if (highScore > 40 && score > highScore && !player._recordBroken) {
@@ -1295,18 +1311,6 @@ function updateGameLogic() {
         const pColor = i % 3 === 0 ? '#fbbf24' : (i % 3 === 1 ? '#00f3ff' : '#f43f5e');
         spawnParticle(player.x, player.y, pColor, 3.5, Math.random() * 8 - 4, Math.random() * -5 - 2);
       }
-    }
-    
-    // Velocidad en km/h con color dinámico
-    const speedKmh = Math.floor(player.speedY * 12);
-    speedVal.innerText = `${speedKmh}`;
-    // Color: azul → naranja → rojo según velocidad
-    if (speedKmh < 55) {
-      speedVal.style.color = '#f1f5f9';
-    } else if (speedKmh < 80) {
-      speedVal.style.color = '#fbbf24';
-    } else {
-      speedVal.style.color = '#ef4444';
     }
   }
 
@@ -1334,10 +1338,12 @@ function updateGameLogic() {
       yetiTerrorOverlay.classList.add('active');
     }
 
-    // Actualizar Warning del HUD
+    // Actualizar Warning del HUD (throttleado: cada 6 frames para evitar reflow continuo)
     const distanceToYeti = Math.floor((player.y - yeti.y) / 10);
     if (distanceToYeti > 0 && gameState === STATES.PLAYING) {
-      yetiDistanceLabel.innerHTML = `¡El Yeti está a <strong>${distanceToYeti}m</strong> de ti!`;
+      if (_frameCount % 6 === 0) {
+        yetiDistanceLabel.innerHTML = `¡El Yeti está a <strong>${distanceToYeti}m</strong> de ti!`;
+      }
       
       // Temblor de pantalla (Camera Shake) por las monstruosas pisadas del Yeti
       if (distanceToYeti < 35 && Math.sin((Date.now() * 0.015)) > 0.4) {
@@ -1356,7 +1362,7 @@ function updateGameLogic() {
       const proximityFactor = Math.max(0, 1 - (distanceToYeti / 45)); // de 0 (lejos) a 1 (al lado)
       sound.setSpeed(1.0 + proximityFactor * 0.45); // hasta un 45% más rápido
     } else if (gameState === STATES.EATEN) {
-      yetiDistanceLabel.innerText = `¡Fuiste devorado!`;
+      if (_frameCount % 6 === 0) yetiDistanceLabel.innerText = `¡Fuiste devorado!`;
       if (yetiTerrorOverlay) yetiTerrorOverlay.classList.remove('active');
       cameraShakeY = 0;
     }
@@ -1393,13 +1399,13 @@ function updateGameLogic() {
     if (!yeti.isStunned && gameState !== STATES.EATEN) {
       for (let obs of obstacles) {
         if (obs.type !== OBSTACLE_TYPES.RAMP) {
-          // Detectar colisión cercana del Yeti
+          // Detectar colisión cercana del Yeti (usando distSq para evitar sqrt)
           const dx = yeti.x - obs.x;
           const dy = yeti.y - obs.y;
-          const distance = Math.sqrt(dx * dx + dy * dy);
+          const yColR = yeti.width / 2 + obs.radius;
           
           // El Yeti tiene un radio de colisión más grande por su tamaño
-          if (distance < (yeti.width / 2 + obs.radius)) {
+          if (dx * dx + dy * dy < yColR * yColR) {
             // ¡Yeti choca y queda aturdido!
             yeti.isStunned = true;
             yeti.stunTimer = 90; // 1.5 segundos
@@ -1422,9 +1428,9 @@ function updateGameLogic() {
     if (gameState === STATES.PLAYING) {
       const dx = player.x - yeti.x;
       const dy = player.y - yeti.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+      const yetiColR = player.width / 2 + yeti.width / 2 - 5;
 
-      if (distance < (player.width / 2 + yeti.width / 2 - 5)) {
+      if (dx * dx + dy * dy < yetiColR * yetiColR) {
         // ¡El Yeti te come!
         gameState = STATES.EATEN;
         window.gameState = gameState;
@@ -1485,19 +1491,21 @@ function updateGameLogic() {
       player.magnetTimer--;
       if (player.magnetTimer <= 0) {
         player.hasMagnet = false;
+        updatePowerUpBadges();
       }
-      updatePowerUpBadges();
     }
 
     // Rango de atracción: 170px con ítem recogido o 95px con micro-imán pasivo Cyberpunk
     const magnetRange = player.hasMagnet ? 170 : 95;
+    const magnetRangeSq = magnetRange * magnetRange;
     for (let obs of obstacles) {
       if (!obs.collected && obs.type === OBSTACLE_TYPES.COIN) {
         const dx = player.x - obs.x;
         const dy = player.y - obs.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const distSq = dx * dx + dy * dy;
 
-        if (dist < magnetRange && dist > 1) {
+        if (distSq < magnetRangeSq && distSq > 1) {
+          const dist = Math.sqrt(distSq);
           // Atracción suave que aumenta proporcionalmente a la cercanía
           const pullProgress = 1 - (dist / magnetRange);
           const pullSpeed = (player.hasMagnet ? 4.5 : 2.8) + pullProgress * 7.5 + (player.speedY * 0.3);
@@ -1515,10 +1523,11 @@ function updateGameLogic() {
 
       const dx = player.x - obs.x;
       const dy = player.y - obs.y;
-      const distance = Math.sqrt(dx * dx + dy * dy);
+      const distSq = dx * dx + dy * dy;
+      const collideR = player.width / 2 + obs.radius;
 
       // --- Roce Rasante / Close Call (Slalom Pro) ---
-      if (!obs._nearMiss && distance >= (player.width / 2 + obs.radius) && distance < (player.width / 2 + obs.radius + 15) &&
+      if (!obs._nearMiss && distSq >= collideR * collideR && distSq < (collideR + 15) * (collideR + 15) &&
           (obs.type === OBSTACLE_TYPES.TREE || obs.type === OBSTACLE_TYPES.ROCK || obs.type === OBSTACLE_TYPES.SNOWMAN)) {
         obs._nearMiss = true;
         player.trickBonus = (player.trickBonus || 0) + 10;
@@ -1531,7 +1540,7 @@ function updateGameLogic() {
         }
       }
 
-      if (distance < (player.width / 2 + obs.radius)) {
+      if (distSq < collideR * collideR) {
         if (obs.type === OBSTACLE_TYPES.COIN) {
           // Moneda Dorada recogida (Skin Corona Dorada otorga +2 🪙)
           obs.collected = true;
@@ -2140,15 +2149,18 @@ function drawObstacle(x, y, obs) {
 
     case OBSTACLE_TYPES.COIN: {
       // -------------------------------------------------------------
-      // 🪙 MONEDA DORADA 3D GIRATORIA CON NEÓN
+      // 🪙 MONEDA DORADA 3D GIRATORIA
       // -------------------------------------------------------------
       if (obs.collected) break;
       obs.rot = (obs.rot || 0) + 0.06;
       const coinScale = Math.abs(Math.cos(obs.rot)) * 0.45 + 0.55;
       const coinW = obs.size * 0.5 * coinScale;
 
-      // Glow resplandeciente
-      ctx.shadowColor = '#ffad00';
+      // Glow simulado sin ctx.shadow (rendimiento móvil)
+      ctx.fillStyle = 'rgba(255, 173, 0, 0.25)';
+      ctx.beginPath();
+      ctx.ellipse(0, -4, coinW + 5, obs.size * 0.5 + 5, 0, 0, Math.PI * 2);
+      ctx.fill();
 
       // Anillo exterior
       ctx.fillStyle = '#d97706';
@@ -2167,8 +2179,6 @@ function drawObstacle(x, y, obs) {
       ctx.beginPath();
       ctx.ellipse(0, -4, coinW * 0.7, obs.size * 0.35, 0, 0, Math.PI * 2);
       ctx.fill();
-
-      ctx.shadowColor = 'transparent';
 
       // Símbolo "$"
       if (coinScale > 0.55) {
@@ -2189,8 +2199,11 @@ function drawObstacle(x, y, obs) {
       obs.floatOffset = (obs.floatOffset || 0) + 0.05;
       const floatY = Math.sin(obs.floatOffset) * 3 - 6;
 
-      // Glow holográfico cian
-      ctx.shadowColor = '#c084fc';
+      // Glow simulado (halo exterior, sin ctx.shadow)
+      ctx.fillStyle = 'rgba(0, 243, 255, 0.15)';
+      ctx.beginPath();
+      ctx.arc(0, floatY, obs.size * 0.85, 0, Math.PI * 2);
+      ctx.fill();
 
       // Orbe exterior
       ctx.fillStyle = 'rgba(0, 243, 255, 0.18)';
@@ -2208,8 +2221,6 @@ function drawObstacle(x, y, obs) {
       ctx.ellipse(0, floatY, obs.size * 0.7, obs.size * 0.25, obs.floatOffset, 0, Math.PI * 2);
       ctx.stroke();
 
-      ctx.shadowColor = 'transparent';
-
       // Ícono de escudo
       ctx.font = '14px sans-serif';
       ctx.textAlign = 'center';
@@ -2226,8 +2237,11 @@ function drawObstacle(x, y, obs) {
       obs.floatOffset = (obs.floatOffset || 0) + 0.05;
       const floatY = Math.sin(obs.floatOffset) * 3 - 6;
 
-      // Glow púrpura
-      ctx.shadowColor = '#c084fc';
+      // Glow simulado (halo exterior, sin ctx.shadow)
+      ctx.fillStyle = 'rgba(192, 132, 252, 0.15)';
+      ctx.beginPath();
+      ctx.arc(0, floatY, obs.size * 0.85, 0, Math.PI * 2);
+      ctx.fill();
 
       // Orbe exterior
       ctx.fillStyle = 'rgba(168, 85, 247, 0.18)';
@@ -2244,8 +2258,6 @@ function drawObstacle(x, y, obs) {
       ctx.beginPath();
       ctx.ellipse(0, floatY, obs.size * 0.7, obs.size * 0.25, -obs.floatOffset, 0, Math.PI * 2);
       ctx.stroke();
-
-      ctx.shadowColor = 'transparent';
 
       // Ícono de imán
       ctx.font = '14px sans-serif';
@@ -2269,11 +2281,10 @@ function drawObstacle(x, y, obs) {
       ctx.closePath();
       ctx.fill();
 
-      // Rampa principal (nieve moldeada)
+      // Rampa principal (nieve moldeada) — sin shadowColor para rendimiento móvil
       ctx.fillStyle = 'rgba(0, 243, 255, 0.15)';
       ctx.strokeStyle = '#00f3ff';
       ctx.lineWidth = 2;
-      ctx.shadowColor = '#00f3ff';
       ctx.beginPath();
       ctx.moveTo(-obs.size * 0.6, 0);
       ctx.lineTo(-obs.size * 0.4, -obs.size * 0.35);
@@ -2282,7 +2293,6 @@ function drawObstacle(x, y, obs) {
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
-      ctx.shadowColor = 'transparent';
 
       // Borde de despegue (neón)
       ctx.strokeStyle = '#38bdf8';
@@ -3207,10 +3217,9 @@ function drawYeti(x, y) {
     }
   }
 
-  // 1. DIBUJAR SPRITE BITMAP HD DEL YETI
+  // 1. DIBUJAR SPRITE BITMAP HD DEL YETI (sin shadowColor para rendimiento móvil)
   if (yetiImg.complete && yetiImg.naturalWidth > 0) {
     ctx.save();
-    ctx.shadowColor = '#ef4444';
     ctx.beginPath();
     ctx.arc(0, -2, 32, 0, Math.PI * 2);
     ctx.clip();
@@ -3301,14 +3310,17 @@ function drawYeti(x, y) {
     ctx.beginPath(); ctx.moveTo(2, -12); ctx.lineTo(8, -6); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(8, -12); ctx.lineTo(2, -6); ctx.stroke();
   } else {
-    // Ojos rojos brillantes
+    // Ojos rojos brillantes (glow simulado sin ctx.shadow)
+    ctx.fillStyle = 'rgba(239, 68, 68, 0.4)';
+    ctx.beginPath();
+    ctx.arc(-6, -9, 7, 0, Math.PI * 2);
+    ctx.arc(6, -9, 7, 0, Math.PI * 2);
+    ctx.fill();
     ctx.fillStyle = '#ef4444';
-    ctx.shadowColor = '#ef4444';
     ctx.beginPath();
     ctx.arc(-6, -9, 4.5, 0, Math.PI * 2);
     ctx.arc(6, -9, 4.5, 0, Math.PI * 2);
     ctx.fill();
-    ctx.shadowColor = 'transparent';
 
     // Pupilas amarillas malignas
     ctx.fillStyle = '#ffad00';
@@ -3389,33 +3401,31 @@ function drawWeatherSnow() {
   const isBlizzard = yeti.active && gameState === STATES.PLAYING;
   const blizzardSpeedMult = isBlizzard ? 2.2 : 1.0;
   const windX = (player.speedX || 0) * 0.35;
+  const snowSizeMult = isBlizzard ? 1.25 : 1.0;
 
-  ctx.save();
-  weatherSnowflakes.forEach(sf => {
+  // 1. Física: mover todos los copos primero
+  for (let i = 0; i < weatherSnowflakes.length; i++) {
+    const sf = weatherSnowflakes[i];
     sf.sway = (sf.sway || 0) + 0.035;
-    const dynamicAlpha = isBlizzard ? Math.min(0.9, (sf.opacity || 0.4) * 1.6) : (sf.opacity || 0.4);
-    
-    ctx.fillStyle = `rgba(255, 255, 255, ${dynamicAlpha})`;
-    ctx.beginPath();
-    ctx.arc(sf.x, sf.y, sf.size * (isBlizzard ? 1.25 : 1.0), 0, Math.PI * 2);
-    ctx.fill();
-
-    // Mover copos de nieve
     sf.y += (sf.speedY + (player.speedY || 4) * 0.15) * blizzardSpeedMult;
     sf.x += (sf.speedX + Math.sin(sf.sway) * 0.7 - windX) * blizzardSpeedMult;
 
-    // Reposicionar si salen de la pantalla
-    if (sf.y > height + 10) {
-      sf.y = -10;
-      sf.x = Math.random() * width;
-    }
-    if (sf.x < -10) {
-      sf.x = width + 10;
-    }
-    if (sf.x > width + 10) {
-      sf.x = -10;
-    }
-  });
+    if (sf.y > height + 10) { sf.y = -10; sf.x = Math.random() * width; }
+    if (sf.x < -10) { sf.x = width + 10; }
+    if (sf.x > width + 10) { sf.x = -10; }
+  }
+
+  // 2. Dibujo batched: un solo path para todos los copos (evita N beginPath/fill)
+  ctx.save();
+  const batchAlpha = isBlizzard ? 0.65 : 0.38;
+  ctx.fillStyle = `rgba(255, 255, 255, ${batchAlpha})`;
+  ctx.beginPath();
+  for (let i = 0; i < weatherSnowflakes.length; i++) {
+    const sf = weatherSnowflakes[i];
+    ctx.moveTo(sf.x + sf.size * snowSizeMult, sf.y);
+    ctx.arc(sf.x, sf.y, sf.size * snowSizeMult, 0, Math.PI * 2);
+  }
+  ctx.fill();
   ctx.restore();
 }
 
@@ -3447,7 +3457,7 @@ function updateAndDrawFloatingTexts(cameraY) {
     ctx.save();
     ctx.globalAlpha = ft.alpha;
     ctx.fillStyle = ft.color;
-    ctx.shadowColor = ft.color;
+    // Sin ctx.shadowColor para evitar compositing layer en cada texto flotante
     ctx.font = `bold ${ft.size}px "Space Grotesk", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
