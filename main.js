@@ -359,14 +359,44 @@ let touchTargetX = null;
 let smoothedCameraY = 0;
 
 // Carga de Sprites de Alta Definición
-const skierImg = new Image();
+// IMPORTANTE: Pre-renderizar imágenes gigantes en offscreen canvases pequeños para mobile GPU
+let skierImg = new Image();
 skierImg.src = './skier_sprite.jpg';
+skierImg.onload = () => { skierImg = optimizeSprite(skierImg, 80); };
 
-const boarderImg = new Image();
+let boarderImg = new Image();
 boarderImg.src = './snowboarder_sprite.jpg';
+boarderImg.onload = () => { boarderImg = optimizeSprite(boarderImg, 80); };
 
-const yetiImg = new Image();
+let yetiImg = new Image();
 yetiImg.src = './yeti_sprite.jpg';
+yetiImg.onload = () => { yetiImg = optimizeSprite(yetiImg, 100); };
+
+// Función para escalar imágenes gigantes y no fundir la GPU de celulares
+function optimizeSprite(img, maxDim) {
+  try {
+    const nw = img.naturalWidth || img.width;
+    const nh = img.naturalHeight || img.height;
+    if (!nw) return img;
+    const scale = Math.min(1, maxDim / Math.max(nw, nh));
+    const targetW = Math.round(nw * scale);
+    const targetH = Math.round(nh * scale);
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = targetW;
+    tempCanvas.height = targetH;
+    const ctx = tempCanvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, targetW, targetH);
+    // Para no romper verificaciones de complete y naturalWidth:
+    tempCanvas.complete = true;
+    tempCanvas.naturalWidth = targetW;
+    tempCanvas.naturalHeight = targetH;
+    return tempCanvas;
+  } catch(e) {
+    return img;
+  }
+}
 
 // Función para hacer transparente el fondo blanco de los sprites
 function makeImageTransparent(img) {
@@ -410,23 +440,29 @@ retroHumanSkierImg.onload = () => {
 };
 
 // Sprites Retro Pixel Art - Snowboarders (3 Poses 100% individuales e independientes)
-const humanBoarderLeftImg = new Image();
+let humanBoarderLeftImg = new Image();
 humanBoarderLeftImg.src = './human_boarder_left.png';
+humanBoarderLeftImg.onload = () => { humanBoarderLeftImg = optimizeSprite(humanBoarderLeftImg, 80); };
 
-const humanBoarderDownImg = new Image();
+let humanBoarderDownImg = new Image();
 humanBoarderDownImg.src = './human_boarder_down.png';
+humanBoarderDownImg.onload = () => { humanBoarderDownImg = optimizeSprite(humanBoarderDownImg, 80); };
 
-const humanBoarderRightImg = new Image();
+let humanBoarderRightImg = new Image();
 humanBoarderRightImg.src = './human_boarder_right.png';
+humanBoarderRightImg.onload = () => { humanBoarderRightImg = optimizeSprite(humanBoarderRightImg, 80); };
 
-const bananaBoarderLeftImg = new Image();
+let bananaBoarderLeftImg = new Image();
 bananaBoarderLeftImg.src = './banana_boarder_left.png';
+bananaBoarderLeftImg.onload = () => { bananaBoarderLeftImg = optimizeSprite(bananaBoarderLeftImg, 80); };
 
-const bananaBoarderDownImg = new Image();
+let bananaBoarderDownImg = new Image();
 bananaBoarderDownImg.src = './banana_boarder_down.png';
+bananaBoarderDownImg.onload = () => { bananaBoarderDownImg = optimizeSprite(bananaBoarderDownImg, 80); };
 
-const bananaBoarderRightImg = new Image();
+let bananaBoarderRightImg = new Image();
 bananaBoarderRightImg.src = './banana_boarder_right.png';
+bananaBoarderRightImg.onload = () => { bananaBoarderRightImg = optimizeSprite(bananaBoarderRightImg, 80); };
 
 // Configuración de generación de obstáculos
 const OBSTACLE_TYPES = {
@@ -1137,23 +1173,12 @@ let _showFps = true;
 // --- CAP DE FPS EN MOBILE ---
 // En mobile apuntamos a 30fps estables en lugar de intentar 60fps y colapsar a 4fps.
 // En desktop dejamos correr a 60fps nativo.
-const _targetInterval = isMobile ? 1000 / 30 : 0; // 33ms entre frames en mobile, 0 = sin límite
-let _lastRenderTime = 0;
-
 function update(timestamp) {
   requestAnimationFrame(update); // Siempre registrar el siguiente frame
 
   if (!_lastFrameTime) {
     _lastFrameTime = timestamp;
     _fpsWindowStart = timestamp;
-    _lastRenderTime = timestamp;
-  }
-
-  // En mobile: saltar el frame si no pasaron los 33ms (~30fps)
-  if (_targetInterval > 0) {
-    const sinceLastRender = timestamp - _lastRenderTime;
-    if (sinceLastRender < _targetInterval) return;
-    _lastRenderTime = timestamp;
   }
 
   const deltaMs = timestamp - _lastFrameTime;
