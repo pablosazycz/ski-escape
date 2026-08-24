@@ -462,11 +462,11 @@ canvas.addEventListener('pointerdown', (e) => {
   sound.init();
   updateTouchTarget(e.clientX);
 
-  // Toque en la esquina superior derecha → toggle del contador de FPS
+  // Toque en la zona inferior central → toggle del contador de FPS
   const rect = canvas.getBoundingClientRect();
   const tapX = (e.clientX - rect.left) * (width / rect.width);
   const tapY = (e.clientY - rect.top) * (height / rect.height);
-  if (tapX > width - 80 && tapY < 40) {
+  if (tapX > width / 2 - 50 && tapX < width / 2 + 50 && tapY > height - 45) {
     _showFps = !_showFps;
   }
 });
@@ -1977,25 +1977,24 @@ function render() {
   // 6. Efecto de nieve de fondo decorativa (clima)
   drawWeatherSnow();
 
-  // 7. Contador de FPS (dibujado al final para que quede siempre encima)
+  // 7. Contador de FPS — centro inferior del canvas (zona siempre libre de botones)
   if (_showFps) {
     const fps = _fpsDisplay;
-    // Color según rendimiento: verde=60, amarillo=30-59, rojo<30
     const fpsColor = fps >= 55 ? '#22c55e' : fps >= 28 ? '#fbbf24' : '#ef4444';
     const fpsText = `${fps} FPS`;
+    const fx = width / 2;
+    const fy = height - 18;
 
     ctx.save();
-    // Fondo semitransparente
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
     ctx.beginPath();
-    ctx.roundRect(width - 70, 8, 62, 22, 5);
+    ctx.roundRect(fx - 36, fy - 11, 72, 22, 6);
     ctx.fill();
-    // Texto FPS
     ctx.fillStyle = fpsColor;
     ctx.font = 'bold 13px monospace';
-    ctx.textAlign = 'right';
+    ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(fpsText, width - 10, 19);
+    ctx.fillText(fpsText, fx, fy);
     ctx.restore();
   }
 }
