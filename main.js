@@ -461,6 +461,14 @@ function updateTouchTarget(clientX) {
 canvas.addEventListener('pointerdown', (e) => {
   sound.init();
   updateTouchTarget(e.clientX);
+
+  // Toque en la esquina superior derecha → toggle del contador de FPS
+  const rect = canvas.getBoundingClientRect();
+  const tapX = (e.clientX - rect.left) * (width / rect.width);
+  const tapY = (e.clientY - rect.top) * (height / rect.height);
+  if (tapX > width - 80 && tapY < 40) {
+    _showFps = !_showFps;
+  }
 });
 
 canvas.addEventListener('pointermove', (e) => {
@@ -1119,11 +1127,30 @@ function revivePlayer() {
 // Bucle de física y dibujo con deltaTime para framerate independiente
 let _lastFrameTime = 0;
 let _frameCount = 0;
+
+// --- CONTADOR DE FPS ---
+let _fpsDisplay = 0;          // Valor mostrado en pantalla
+let _fpsFrames = 0;           // Frames contados en la ventana actual
+let _fpsWindowStart = 0;      // Timestamp de inicio de la ventana de 1 segundo
+let _showFps = true;          // Visible por defecto para diagnosticar
+
 function update(timestamp) {
-  if (!_lastFrameTime) _lastFrameTime = timestamp;
+  if (!_lastFrameTime) {
+    _lastFrameTime = timestamp;
+    _fpsWindowStart = timestamp;
+  }
   const deltaMs = timestamp - _lastFrameTime;
   _lastFrameTime = timestamp;
   _frameCount++;
+  _fpsFrames++;
+
+  // Actualizar FPS cada segundo
+  const elapsed = timestamp - _fpsWindowStart;
+  if (elapsed >= 1000) {
+    _fpsDisplay = Math.round(_fpsFrames * 1000 / elapsed);
+    _fpsFrames = 0;
+    _fpsWindowStart = timestamp;
+  }
 
   // En mobile, si el frame tardó menos de 30fps (33ms), seguimos normal.
   // Si tardó más, no acumulamos lógica extra (evita espirales de lag).
@@ -1949,6 +1976,28 @@ function render() {
 
   // 6. Efecto de nieve de fondo decorativa (clima)
   drawWeatherSnow();
+
+  // 7. Contador de FPS (dibujado al final para que quede siempre encima)
+  if (_showFps) {
+    const fps = _fpsDisplay;
+    // Color según rendimiento: verde=60, amarillo=30-59, rojo<30
+    const fpsColor = fps >= 55 ? '#22c55e' : fps >= 28 ? '#fbbf24' : '#ef4444';
+    const fpsText = `${fps} FPS`;
+
+    ctx.save();
+    // Fondo semitransparente
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+    ctx.beginPath();
+    ctx.roundRect(width - 70, 8, 62, 22, 5);
+    ctx.fill();
+    // Texto FPS
+    ctx.fillStyle = fpsColor;
+    ctx.font = 'bold 13px monospace';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(fpsText, width - 10, 19);
+    ctx.restore();
+  }
 }
 
 // Dibuja obstáculo específico en Canvas con mejoras visuales HD
