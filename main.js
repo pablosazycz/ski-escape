@@ -1129,16 +1129,33 @@ let _lastFrameTime = 0;
 let _frameCount = 0;
 
 // --- CONTADOR DE FPS ---
-let _fpsDisplay = 0;          // Valor mostrado en pantalla
-let _fpsFrames = 0;           // Frames contados en la ventana actual
-let _fpsWindowStart = 0;      // Timestamp de inicio de la ventana de 1 segundo
-let _showFps = true;          // Visible por defecto para diagnosticar
+let _fpsDisplay = 0;
+let _fpsFrames = 0;
+let _fpsWindowStart = 0;
+let _showFps = true;
+
+// --- CAP DE FPS EN MOBILE ---
+// En mobile apuntamos a 30fps estables en lugar de intentar 60fps y colapsar a 4fps.
+// En desktop dejamos correr a 60fps nativo.
+const _targetInterval = isMobile ? 1000 / 30 : 0; // 33ms entre frames en mobile, 0 = sin límite
+let _lastRenderTime = 0;
 
 function update(timestamp) {
+  requestAnimationFrame(update); // Siempre registrar el siguiente frame
+
   if (!_lastFrameTime) {
     _lastFrameTime = timestamp;
     _fpsWindowStart = timestamp;
+    _lastRenderTime = timestamp;
   }
+
+  // En mobile: saltar el frame si no pasaron los 33ms (~30fps)
+  if (_targetInterval > 0) {
+    const sinceLastRender = timestamp - _lastRenderTime;
+    if (sinceLastRender < _targetInterval) return;
+    _lastRenderTime = timestamp;
+  }
+
   const deltaMs = timestamp - _lastFrameTime;
   _lastFrameTime = timestamp;
   _frameCount++;
@@ -1152,14 +1169,11 @@ function update(timestamp) {
     _fpsWindowStart = timestamp;
   }
 
-  // En mobile, si el frame tardó menos de 30fps (33ms), seguimos normal.
-  // Si tardó más, no acumulamos lógica extra (evita espirales de lag).
   if (gameState === STATES.PLAYING || gameState === STATES.JUMPING || gameState === STATES.CRASHED || gameState === STATES.EATEN) {
     updateGameLogic();
   }
-  
+
   render();
-  requestAnimationFrame(update);
 }
 
 // Iniciar bucle
@@ -1909,13 +1923,15 @@ function render() {
     }
   });
 
-  // 2. Dibujar Obstáculos
+  // 2. Dibujar Obstáculos (simplificado en mobile para reducir draw calls)
   obstacles.forEach(obs => {
     const screenY = obs.y - cameraY;
-    
-    // Solo dibujar si está en la pantalla
     if (screenY > -100 && screenY < height + 100) {
-      drawObstacle(obs.x, screenY, obs);
+      if (isMobile) {
+        drawObstacleSimple(obs.x, screenY, obs);
+      } else {
+        drawObstacle(obs.x, screenY, obs);
+      }
     }
   });
 
@@ -1997,6 +2013,123 @@ function render() {
     ctx.fillText(fpsText, fx, fy);
     ctx.restore();
   }
+}
+
+// ==========================================================================
+// DIBUJO SIMPLIFICADO PARA MOBILE (mínimas operaciones canvas por obstáculo)
+// ==========================================================================
+function drawObstacleSimple(x, y, obs) {
+  if (obs.collected) return;
+  ctx.save();
+  ctx.translate(x, y);
+
+  switch (obs.type) {
+    case OBSTACLE_TYPES.TREE: {
+      // Árbol: tronco + triángulo verde simple
+      ctx.fillStyle = '#5a2d0c';
+      ctx.fillRect(-3, -2, 6, obs.size * 0.35);
+      ctx.fillStyle = '#15803d';
+      ctx.beginPath();
+      ctx.moveTo(0, -obs.size * 0.9);
+      ctx.lineTo(-obs.size * 0.5, 0);
+      ctx.lineTo(obs.size * 0.5, 0);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case OBSTACLE_TYPES.ROCK: {
+      // Roca: polígono gris simple
+      ctx.fillStyle = '#475569';
+      ctx.beginPath();
+      ctx.moveTo(-obs.size * 0.5, 0);
+      ctx.lineTo(-obs.size * 0.3, -obs.size * 0.55);
+      ctx.lineTo(obs.size * 0.3, -obs.size * 0.55);
+      ctx.lineTo(obs.size * 0.5, 0);
+      ctx.closePath();
+      ctx.fill();
+      // Nieve encima
+      ctx.fillStyle = '#e2e8f0';
+      ctx.beginPath();
+      ctx.ellipse(0, -obs.size * 0.5, obs.size * 0.3, obs.size * 0.12, 0, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case OBSTACLE_TYPES.SNOWMAN: {
+      // Muñeco: 3 círculos apilados
+      ctx.fillStyle = '#f0f4f8';
+      ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, -13, 7, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(0, -22, 5, 0, Math.PI * 2); ctx.fill();
+      // Ojos
+      ctx.fillStyle = '#1e293b';
+      ctx.beginPath(); ctx.arc(-2, -23, 1, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(2, -23, 1, 0, Math.PI * 2); ctx.fill();
+      break;
+    }
+    case OBSTACLE_TYPES.COIN: {
+      // Moneda: elipse giratoria simple
+      obs.rot = (obs.rot || 0) + 0.06;
+      const coinScale = Math.abs(Math.cos(obs.rot)) * 0.45 + 0.55;
+      const cw = obs.size * 0.5 * coinScale;
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.ellipse(0, -4, cw + 1.5, obs.size * 0.5 + 1.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.ellipse(0, -4, cw * 0.6, obs.size * 0.3, 0, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case OBSTACLE_TYPES.SHIELD: {
+      obs.floatOffset = (obs.floatOffset || 0) + 0.05;
+      const fy = Math.sin(obs.floatOffset) * 3 - 6;
+      ctx.fillStyle = 'rgba(0, 243, 255, 0.35)';
+      ctx.strokeStyle = '#00f3ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, fy, obs.size * 0.65, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🛡️', 0, fy);
+      break;
+    }
+    case OBSTACLE_TYPES.MAGNET: {
+      obs.floatOffset = (obs.floatOffset || 0) + 0.05;
+      const fy = Math.sin(obs.floatOffset) * 3 - 6;
+      ctx.fillStyle = 'rgba(168, 85, 247, 0.35)';
+      ctx.strokeStyle = '#c084fc';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, fy, obs.size * 0.65, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.font = '14px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🧲', 0, fy);
+      break;
+    }
+    case OBSTACLE_TYPES.RAMP: {
+      // Rampa: triángulo cian simple
+      ctx.fillStyle = 'rgba(0, 243, 255, 0.25)';
+      ctx.strokeStyle = '#00f3ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(-obs.size * 0.6, 0);
+      ctx.lineTo(0, -obs.size * 0.35);
+      ctx.lineTo(obs.size * 0.6, 0);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      break;
+    }
+  }
+
+  ctx.restore();
 }
 
 // Dibuja obstáculo específico en Canvas con mejoras visuales HD
