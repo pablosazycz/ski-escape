@@ -372,10 +372,10 @@ boarderImg.onload = () => { boarderImg = optimizeSprite(boarderImg, 80); };
 
 let yetiImg = new Image();
 yetiImg.src = './yeti_sprite.jpg';
-yetiImg.onload = () => { yetiImg = optimizeSprite(yetiImg, 100); };
+yetiImg.onload = () => { yetiImg = optimizeSprite(yetiImg, 100, true); };
 
 // Función para escalar imágenes gigantes y no fundir la GPU de celulares
-function optimizeSprite(img, maxDim) {
+function optimizeSprite(img, maxDim, circular = false) {
   try {
     const nw = img.naturalWidth || img.width;
     const nh = img.naturalHeight || img.height;
@@ -389,6 +389,11 @@ function optimizeSprite(img, maxDim) {
     const ctx = tempCanvas.getContext('2d');
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
+    if (circular) {
+      ctx.beginPath();
+      ctx.arc(targetW / 2, targetH / 2, Math.min(targetW, targetH) / 2, 0, Math.PI * 2);
+      ctx.clip();
+    }
     ctx.drawImage(img, 0, 0, targetW, targetH);
     // Para no romper verificaciones de complete y naturalWidth:
     tempCanvas.complete = true;
@@ -1470,8 +1475,9 @@ function updateGameLogic() {
       }
     }
 
-    // Huellas gigantes del Yeti
-    if (!yeti.isStunned && Math.random() < 0.6 && gameState !== STATES.EATEN) {
+    // Huellas gigantes del Yeti (optimizado en móvil)
+    const yetiTrackChance = isMobile ? 0.25 : 0.6;
+    if (!yeti.isStunned && Math.random() < yetiTrackChance && gameState !== STATES.EATEN) {
       addTrack(yeti.x - 12, yeti.y, 4, 0.4);
       addTrack(yeti.x + 12, yeti.y, 4, 0.4);
     }
@@ -1963,15 +1969,11 @@ function render() {
     }
   });
 
-  // 2. Dibujar Obstáculos (simplificado en mobile para reducir draw calls)
+  // 2. Dibujar Obstáculos con arte HD completo
   obstacles.forEach(obs => {
     const screenY = obs.y - cameraY;
     if (screenY > -100 && screenY < height + 100) {
-      if (isMobile) {
-        drawObstacleSimple(obs.x, screenY, obs);
-      } else {
-        drawObstacle(obs.x, screenY, obs);
-      }
+      drawObstacle(obs.x, screenY, obs);
     }
   });
 
@@ -3438,14 +3440,9 @@ function drawYeti(x, y) {
     }
   }
 
-  // 1. DIBUJAR SPRITE BITMAP HD DEL YETI (sin shadowColor para rendimiento móvil)
+  // 1. DIBUJAR SPRITE BITMAP HD DEL YETI (pre-recortado circular sin costo de clip)
   if (yetiImg.complete && yetiImg.naturalWidth > 0) {
-    ctx.save();
-    ctx.beginPath();
-    ctx.arc(0, -2, 32, 0, Math.PI * 2);
-    ctx.clip();
     ctx.drawImage(yetiImg, -36, -38, 72, 72);
-    ctx.restore();
   } else {
     // Torso masivo
     ctx.beginPath();
