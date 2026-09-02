@@ -1895,15 +1895,12 @@ function triggerGameOver(reason, eatenByYeti = false) {
     setTimeout(() => goPanel.classList.remove('shake'), 500);
   }
 
-  // Mostrar publicidad según cómo murió
+  // Mostrar publicidad según cómo murió (Intersticial exclusivo al ser comido por el Yeti)
   if (eatenByYeti) {
-    console.log('[Game] Jugador comido por el Yeti. Cargando anuncio intersticial...');
+    console.log('[Game] Jugador comido por el Yeti. Mostrando anuncio intersticial...');
     ads.showInterstitial(() => {
-      console.log('[Game] Anuncio intersticial finalizado, mostrando banner.');
-      ads.showBanner();
+      console.log('[Game] Anuncio intersticial finalizado.');
     });
-  } else {
-    ads.showBanner();
   }
 }
 
