@@ -132,25 +132,27 @@ document.addEventListener('click', (e) => {
 });
 
 // Detección global de dispositivo móvil (se usa para optimizar rendimiento)
-const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ||
+                 (navigator.maxTouchPoints > 1 && window.innerWidth <= 1024);
 const MAX_SKI_TRACKS = isMobile ? 150 : 400;
 const MAX_PARTICLES = isMobile ? 60 : 200;
 let _trackFrameSkip = 0; // Throttle de tracks en mobile
 
 // Configuración de resolución responsiva
-let width = canvas.clientWidth;
-let height = canvas.clientHeight;
+let width = canvas.clientWidth || window.innerWidth;
+let height = canvas.clientHeight || window.innerHeight;
+let cachedCanvasRect = null;
 
 function resizeCanvas() {
   const container = document.getElementById('gameContainer');
-  width = container.clientWidth;
-  height = container.clientHeight;
-  // isMobile ya definido como constante global
+  width = (container && container.clientWidth) ? container.clientWidth : window.innerWidth;
+  height = (container && container.clientHeight) ? container.clientHeight : window.innerHeight;
   const maxDpr = isMobile ? 1.0 : 2.0;
   const dpr = Math.min(window.devicePixelRatio || 1, maxDpr); // Optimizado para no reventar la GPU de celulares
   canvas.width = width * dpr;
   canvas.height = height * dpr;
   ctx.scale(dpr, dpr);
+  cachedCanvasRect = canvas.getBoundingClientRect();
 }
 
 window.addEventListener('resize', resizeCanvas);
@@ -398,15 +400,26 @@ function optimizeSprite(img, maxDim) {
   }
 }
 
-// Función para hacer transparente el fondo blanco de los sprites
-function makeImageTransparent(img) {
+// Función para hacer transparente el fondo blanco de los sprites y optimizar resolución
+function makeImageTransparent(img, maxDim = 240) {
   try {
+    const nw = img.naturalWidth || img.width;
+    const nh = img.naturalHeight || img.height;
+    if (!nw || !nh) return img;
+
+    const scale = Math.min(1, maxDim / nw);
+    const targetW = Math.round(nw * scale);
+    const targetH = Math.round(nh * scale);
+
     const tempCanvas = document.createElement('canvas');
-    tempCanvas.width = img.naturalWidth || img.width;
-    tempCanvas.height = img.naturalHeight || img.height;
+    tempCanvas.width = targetW;
+    tempCanvas.height = targetH;
     const tempCtx = tempCanvas.getContext('2d');
-    tempCtx.drawImage(img, 0, 0);
-    const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+    tempCtx.imageSmoothingEnabled = true;
+    tempCtx.imageSmoothingQuality = 'medium';
+    tempCtx.drawImage(img, 0, 0, targetW, targetH);
+
+    const imgData = tempCtx.getImageData(0, 0, targetW, targetH);
     const data = imgData.data;
     
     const tolerance = 35; 
@@ -417,9 +430,11 @@ function makeImageTransparent(img) {
     }
     tempCtx.putImageData(imgData, 0, 0);
     
-    const newImg = new Image();
-    newImg.src = tempCanvas.toDataURL('image/png');
-    return newImg;
+    // Retornar el canvas preprocesado directamente (evita toDataURL y decodificación asíncrona)
+    tempCanvas.complete = true;
+    tempCanvas.naturalWidth = targetW;
+    tempCanvas.naturalHeight = targetH;
+    return tempCanvas;
   } catch (e) {
     console.warn("No se pudo aplicar transparencia dinámica al sprite:", e);
     return img;
@@ -430,13 +445,13 @@ function makeImageTransparent(img) {
 let retroBananaSkierImg = new Image();
 retroBananaSkierImg.src = './banana_skier_retro_sprites.png';
 retroBananaSkierImg.onload = () => {
-  retroBananaSkierImg = makeImageTransparent(retroBananaSkierImg);
+  retroBananaSkierImg = makeImageTransparent(retroBananaSkierImg, 240);
 };
 
 let retroHumanSkierImg = new Image();
 retroHumanSkierImg.src = './skier_retro_sprites.png';
 retroHumanSkierImg.onload = () => {
-  retroHumanSkierImg = makeImageTransparent(retroHumanSkierImg);
+  retroHumanSkierImg = makeImageTransparent(retroHumanSkierImg, 240);
 };
 
 // Sprites Retro Pixel Art - Snowboarders (3 Poses 100% individuales e independientes)
@@ -489,8 +504,8 @@ window.addEventListener('keyup', (e) => {
 
 // Control direccional analógico directo y ultra responsivo (Móvil y Mouse/PC)
 function updateTouchTarget(clientX) {
-  const rect = canvas.getBoundingClientRect();
-  const scale = width / rect.width;
+  const rect = cachedCanvasRect || canvas.getBoundingClientRect();
+  const scale = width / (rect.width || 1);
   touchTargetX = (clientX - rect.left) * scale;
 }
 
@@ -499,9 +514,9 @@ canvas.addEventListener('pointerdown', (e) => {
   updateTouchTarget(e.clientX);
 
   // Toque en la zona inferior central → toggle del contador de FPS
-  const rect = canvas.getBoundingClientRect();
-  const tapX = (e.clientX - rect.left) * (width / rect.width);
-  const tapY = (e.clientY - rect.top) * (height / rect.height);
+  const rect = cachedCanvasRect || canvas.getBoundingClientRect();
+  const tapX = (e.clientX - rect.left) * (width / (rect.width || 1));
+  const tapY = (e.clientY - rect.top) * (height / (rect.height || 1));
   if (tapX > width / 2 - 50 && tapX < width / 2 + 50 && tapY > height - 45) {
     _showFps = !_showFps;
   }
