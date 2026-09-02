@@ -4,4 +4,5 @@
     <string name="title_activity_main">Ski Escape</string>
     <string name="package_name">com.skiescape.game</string>
     <string name="custom_url_scheme">com.skiescape.game</string>
+    <string name="admob_app_id">ca-app-pub-8709135347132669~4227148447</string>
 </resources>

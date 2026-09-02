@@ -9,3 +9,4 @@ android/build/
 *.apk
 *.aab
 ski-escape-release-apk.zip
+ski-escape-release-apk*.zip
