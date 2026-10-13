@@ -1,18 +1,33 @@
 /**
  * AdMob / Ads Manager Module
- * Integración con Google AdMob nativo via @capacitor-community/admob.
- * En navegador web (Itch.io), usa el simulador HTML integrado como fallback.
+ * Integración 100% REAL con Google AdMob vía @capacitor-community/admob.
  * 
- * OPTIMIZACIÓN DE RENDIMIENTO:
- * - El banner solo se muestra en la pantalla de inicio (Menú Principal).
- * - Al pulsar "Jugar", se destruye la vista nativa de AdMob para que la GPU rinda al 100% (60 FPS).
- * - Pre-carga diferida (delayed) para no bloquear el inicio ni las animaciones.
+ * POLÍTICA DE RENDIMIENTO Y MONETIZACIÓN:
+ * 1. En la app nativa (APK celular) SOLO se usan los bloques de anuncios oficiales de producción.
+ *    NO hay anuncios de prueba ni simuladores falsos que no generen ingresos.
+ * 2. Pre-carga continua y reintentos automáticos en segundo plano:
+ *    Si Google tarda en responder o no tiene inventario en ese instante, el sistema
+ *    sigue solicitando periódicamente hasta tener el anuncio real listo en memoria.
+ * 3. Si el jugador solicita un video y aún no terminó de cargar, se muestra un aviso
+ *    elegante en pantalla ("Cargando anuncio de Google...") mientras se conecta y lo lanza.
+ * 4. Si el anuncio real no puede mostrarse por falta de red, NO se regalan recompensas.
+ * 5. En navegador web de escritorio (Itch.io), donde no existe AdMob nativo, corre
+ *    el simulador HTML exclusivamente para pruebas web.
  */
 
-// Detectar si estamos en Capacitor nativo (APK)
-const isNativeApp = typeof window !== 'undefined' && window.Capacitor !== undefined && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform();
+import { Capacitor } from '@capacitor/core';
+import {
+  AdMob,
+  BannerAdSize,
+  BannerAdPosition,
+  RewardAdPluginEvents,
+  InterstitialAdPluginEvents
+} from '@capacitor-community/admob';
 
-// IDs Oficiales de Google AdMob
+// Detectar si estamos en Capacitor nativo (APK Android / iOS)
+const isNativeApp = typeof window !== 'undefined' && Capacitor.isNativePlatform();
+
+// IDs Oficiales de Producción de Google AdMob
 const AD_CONFIG = {
   appId: 'ca-app-pub-8709135347132669~4227148447',
   bannerId: 'ca-app-pub-8709135347132669/1600985102',
@@ -20,247 +35,383 @@ const AD_CONFIG = {
   interstitialId: 'ca-app-pub-8709135347132669/4625055536'
 };
 
+// Utilidad de aviso flotante visual para el usuario
+function showAdToast(text, duration = 3000) {
+  try {
+    let toast = document.getElementById('adMobToast');
+    if (!toast) {
+      toast = document.createElement('div');
+      toast.id = 'adMobToast';
+      toast.className = 'ad-mob-toast';
+      document.body.appendChild(toast);
+    }
+    toast.innerText = text;
+    toast.classList.add('visible');
+    if (toast._timer) clearTimeout(toast._timer);
+    toast._timer = setTimeout(() => {
+      toast.classList.remove('visible');
+    }, duration);
+  } catch (e) {
+    console.log('[Ad Toast]', text);
+  }
+}
+
 // ============================================================================
-// NATIVE ADMOB MANAGER (APK en celular)
+// NATIVE ADMOB MANAGER (100% Real - Genera Ingresos / eCPM)
 // ============================================================================
 class NativeAdManager {
   constructor() {
-    this.admob = null;
     this.initialized = false;
     this.isMenuScreen = false;
     this.isBannerShowing = false;
     this.rewardedLoaded = false;
+    this.rewardedLoading = false;
     this.interstitialLoaded = false;
+    this.interstitialLoading = false;
+    this._bannerRetryTimeout = null;
+    this._rewardedRetryTimeout = null;
+    this._interstitialRetryTimeout = null;
   }
 
   async init() {
     try {
-      const module = await import('@capacitor-community/admob');
-      this.admob = module.AdMob;
-      this.BannerAdSize = module.BannerAdSize;
-      this.BannerAdPosition = module.BannerAdPosition;
-      this.RewardAdPluginEvents = module.RewardAdPluginEvents;
-      this.InterstitialAdPluginEvents = module.InterstitialAdPluginEvents;
-      this.AdmobConsentStatus = module.AdmobConsentStatus;
-
-      await this.admob.initialize({
+      console.log('[AdMob Real] Inicializando SDK oficial de Google AdMob...');
+      await AdMob.initialize({
         initializeForTesting: false,
       });
 
       this.initialized = true;
-      console.log('[AdMob Native] SDK inicializado correctamente');
+      console.log('[AdMob Real] SDK de Google AdMob inicializado con éxito');
 
-      // Si el menú sigue en pantalla tras inicializar, mostrar el banner
+      // Si el menú principal ya está visible al terminar de iniciar, solicitar banner
       if (this.isMenuScreen && !this.isBannerShowing) {
         this.showBanner();
       }
 
-      // Pre-cargar videos con delay de 3.5 segundos para no consumir CPU/red en arranque
+      // Iniciar precargas continuas de videos en segundo plano
       setTimeout(() => {
         this._preloadRewarded();
         this._preloadInterstitial();
-      }, 3500);
+      }, 2000);
     } catch (err) {
-      console.error('[AdMob Native] Error al inicializar:', err);
+      console.error('[AdMob Real] Error inicializando SDK de Google AdMob:', err);
     }
   }
 
-  // --- BANNER (Exclusivo de Pantalla de Inicio / Menú Principal) ---
+  // --- BANNER OFICIAL (Menú Principal) ---
   async showBanner() {
     this.isMenuScreen = true;
-    if (!this.initialized || !this.admob) return;
     if (this.isBannerShowing) return;
+
+    if (!this.initialized) {
+      return;
+    }
 
     try {
       this.isBannerShowing = true;
-      await this.admob.showBanner({
+      console.log('[AdMob Real] Cargando banner oficial...');
+      await AdMob.showBanner({
         adId: AD_CONFIG.bannerId,
-        adSize: this.BannerAdSize.ADAPTIVE_BANNER,
-        position: this.BannerAdPosition.BOTTOM_CENTER,
+        isTesting: false,
+        adSize: BannerAdSize.ADAPTIVE_BANNER,
+        position: BannerAdPosition.BOTTOM_CENTER,
         margin: 0,
       });
-      console.log('[AdMob Native] Banner mostrado en el menú principal');
-
-      // Si el usuario ya pulsó "JUGAR" mientras el banner cargaba de la red, retirarlo de inmediato
-      if (!this.isMenuScreen) {
-        console.log('[AdMob Native] El usuario inició la partida mientras cargaba el banner. Retirando...');
-        await this.hideBanner();
-      }
+      console.log('[AdMob Real] Banner oficial activo en el menú');
     } catch (err) {
       this.isBannerShowing = false;
-      console.warn('[AdMob Native] Error mostrando banner:', err);
+      console.warn('[AdMob Real] Banner no disponible en este momento. Reintentando en 10s:', err);
+
+      // Redireccionamiento / Reintento periódico para que aparezca en cuanto haya inventario
+      if (this._bannerRetryTimeout) clearTimeout(this._bannerRetryTimeout);
+      this._bannerRetryTimeout = setTimeout(() => {
+        if (this.isMenuScreen && !this.isBannerShowing) {
+          this.showBanner();
+        }
+      }, 10000);
+    }
+
+    // Si el usuario ya pulsó "JUGAR" mientras el banner cargaba de la red, retirarlo de inmediato
+    if (!this.isMenuScreen) {
+      await this.hideBanner();
     }
   }
 
   async hideBanner() {
     this.isMenuScreen = false;
-    if (!this.initialized || !this.admob) return;
+    if (this._bannerRetryTimeout) {
+      clearTimeout(this._bannerRetryTimeout);
+      this._bannerRetryTimeout = null;
+    }
+    if (!this.initialized) return;
+
     try {
-      await this.admob.removeBanner();
-      this.isBannerShowing = false;
-      console.log('[AdMob Native] Banner removido por completo (GPU 100% libre)');
+      await AdMob.removeBanner();
+      console.log('[AdMob Real] Banner removido para juego a 60 FPS');
     } catch (err) {
+      console.warn('[AdMob Real] Error al remover banner:', err);
+    } finally {
       this.isBannerShowing = false;
-      console.warn('[AdMob Native] Error removiendo banner:', err);
     }
   }
 
-  // --- REWARDED VIDEO (Para revivir o monedas gratis) ---
+  // --- REWARDED VIDEO OFICIAL (Precarga continua y reintentos) ---
   async _preloadRewarded() {
-    if (!this.initialized || !this.admob) return;
+    if (!this.initialized || this.rewardedLoading || this.rewardedLoaded) return;
+    this.rewardedLoading = true;
+
+    if (this._rewardedRetryTimeout) {
+      clearTimeout(this._rewardedRetryTimeout);
+      this._rewardedRetryTimeout = null;
+    }
+
     try {
-      await this.admob.prepareRewardVideoAd({
+      console.log('[AdMob Real] Precargando video recompensado oficial de Google...');
+      await AdMob.prepareRewardVideoAd({
         adId: AD_CONFIG.rewardedId,
         isTesting: false,
       });
       this.rewardedLoaded = true;
-      console.log('[AdMob Native] Rewarded precargado');
+      this.rewardedLoading = false;
+      console.log('[AdMob Real] ✅ Video recompensado oficial 100% listo en memoria');
     } catch (err) {
-      console.warn('[AdMob Native] Error precargando rewarded:', err);
       this.rewardedLoaded = false;
+      this.rewardedLoading = false;
+      console.warn('[AdMob Real] Google no entregó video en este intento. Reintentando en 8 segundos...', err);
+      // Mantener bucle de reintento activo para tener siempre un anuncio listo
+      this._rewardedRetryTimeout = setTimeout(() => {
+        if (!this.rewardedLoaded) {
+          this._preloadRewarded();
+        }
+      }, 8000);
     }
   }
 
   async showRewarded(onReward, onClose) {
-    if (!this.initialized || !this.admob) {
-      if (typeof onReward === 'function') onReward();
+    if (!this.initialized) {
+      showAdToast('⏳ Conectando con Google AdMob...');
+      if (typeof onClose === 'function') onClose();
       return;
     }
 
-    try {
-      if (!this.rewardedLoaded) {
-        await this.admob.prepareRewardVideoAd({
-          adId: AD_CONFIG.rewardedId,
-          isTesting: false,
-        });
+    // Si no está listo en memoria, intentar carga activa con espera visual
+    if (!this.rewardedLoaded) {
+      showAdToast('⏳ Cargando anuncio de Google...', 4000);
+      console.log('[AdMob Real] Video no estaba precargado. Intentando carga activa rápida...');
+      try {
+        await Promise.race([
+          this._preloadRewardedDirect(),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout de carga')), 7000))
+        ]);
+      } catch (loadErr) {
+        console.warn('[AdMob Real] No se pudo cargar el video tras reintento activo:', loadErr);
       }
+    }
 
-      const rewardListener = this.admob.addListener(
-        this.RewardAdPluginEvents.Rewarded,
-        () => {
-          console.log('[AdMob Native] Recompensa otorgada');
-          cleanup();
+    // Si aún así no hay anuncio disponible de Google:
+    if (!this.rewardedLoaded) {
+      showAdToast('⚠️ Anuncio no disponible aún. Intenta de nuevo en unos segundos.', 3500);
+      console.warn('[AdMob Real] Sin anuncio disponible. NO se otorga recompensa sin ver el anuncio.');
+      if (typeof onClose === 'function') onClose();
+      // Reanudar precarga inmediatamente en segundo plano
+      this._preloadRewarded();
+      return;
+    }
+
+    // Si tenemos el anuncio real listo, mostrarlo y registrar la recompensa
+    try {
+      let earnedReward = false;
+      let handled = false;
+
+      const finish = (isReward) => {
+        if (handled) return;
+        handled = true;
+        this.rewardedLoaded = false;
+        cleanup();
+        // Iniciar precarga inmediata del siguiente anuncio
+        setTimeout(() => this._preloadRewarded(), 2000);
+
+        if (isReward) {
           if (typeof onReward === 'function') onReward();
-          this.rewardedLoaded = false;
-          setTimeout(() => this._preloadRewarded(), 2000);
+        } else {
+          if (typeof onClose === 'function') onClose();
+        }
+      };
+
+      const rewardSub = AdMob.addListener(
+        RewardAdPluginEvents.Rewarded,
+        (rewardItem) => {
+          console.log('[AdMob Real] Recompensa confirmada por Google AdMob:', rewardItem);
+          earnedReward = true;
         }
       );
 
-      const dismissListener = this.admob.addListener(
-        this.RewardAdPluginEvents.Dismissed,
+      const dismissSub = AdMob.addListener(
+        RewardAdPluginEvents.Dismissed,
         () => {
-          console.log('[AdMob Native] Rewarded cerrado');
-          cleanup();
-          if (typeof onClose === 'function') onClose();
-          this.rewardedLoaded = false;
-          setTimeout(() => this._preloadRewarded(), 2000);
+          console.log('[AdMob Real] Video recompensado cerrado. earnedReward =', earnedReward);
+          finish(earnedReward);
         }
       );
 
-      const failListener = this.admob.addListener(
-        this.RewardAdPluginEvents.FailedToShow,
+      const failSub = AdMob.addListener(
+        RewardAdPluginEvents.FailedToShow,
         (err) => {
-          console.warn('[AdMob Native] Rewarded falló al mostrar:', err);
+          console.warn('[AdMob Real] Error al reproducir video:', err);
           cleanup();
-          if (typeof onClose === 'function') onClose();
           this.rewardedLoaded = false;
+          showAdToast('⚠️ Error al reproducir anuncio de Google.', 3000);
+          finish(false);
           setTimeout(() => this._preloadRewarded(), 2000);
         }
       );
 
       const cleanup = () => {
-        rewardListener.then(l => l.remove()).catch(() => {});
-        dismissListener.then(l => l.remove()).catch(() => {});
-        failListener.then(l => l.remove()).catch(() => {});
+        rewardSub.then(l => l.remove()).catch(() => {});
+        dismissSub.then(l => l.remove()).catch(() => {});
+        failSub.then(l => l.remove()).catch(() => {});
       };
 
-      await this.admob.showRewardVideoAd();
-      this.rewardedLoaded = false;
+      await AdMob.showRewardVideoAd();
     } catch (err) {
-      console.warn('[AdMob Native] Error mostrando rewarded:', err);
-      if (typeof onReward === 'function') onReward();
+      console.warn('[AdMob Real] Excepción en showRewardVideoAd:', err);
       this.rewardedLoaded = false;
+      showAdToast('⚠️ No se pudo reproducir el anuncio.', 3000);
+      if (typeof onClose === 'function') onClose();
       setTimeout(() => this._preloadRewarded(), 2000);
     }
   }
 
-  // --- INTERSTITIAL (Pantalla completa al ser comido por el Yeti) ---
-  async _preloadInterstitial() {
-    if (!this.initialized || !this.admob) return;
+  async _preloadRewardedDirect() {
+    this.rewardedLoading = true;
     try {
-      await this.admob.prepareInterstitial({
+      await AdMob.prepareRewardVideoAd({
+        adId: AD_CONFIG.rewardedId,
+        isTesting: false,
+      });
+      this.rewardedLoaded = true;
+      this.rewardedLoading = false;
+      return true;
+    } catch (err) {
+      this.rewardedLoaded = false;
+      this.rewardedLoading = false;
+      throw err;
+    }
+  }
+
+  // --- INTERSTITIAL OFICIAL (Al ser comido por el Yeti) ---
+  async _preloadInterstitial() {
+    if (!this.initialized || this.interstitialLoading || this.interstitialLoaded) return;
+    this.interstitialLoading = true;
+
+    if (this._interstitialRetryTimeout) {
+      clearTimeout(this._interstitialRetryTimeout);
+      this._interstitialRetryTimeout = null;
+    }
+
+    try {
+      console.log('[AdMob Real] Precargando anuncio intersticial oficial...');
+      await AdMob.prepareInterstitial({
         adId: AD_CONFIG.interstitialId,
         isTesting: false,
       });
       this.interstitialLoaded = true;
-      console.log('[AdMob Native] Interstitial precargado');
+      this.interstitialLoading = false;
+      console.log('[AdMob Real] ✅ Intersticial oficial listo en memoria');
     } catch (err) {
-      console.warn('[AdMob Native] Error precargando interstitial:', err);
       this.interstitialLoaded = false;
+      this.interstitialLoading = false;
+      console.warn('[AdMob Real] Intersticial no disponible ahora. Reintentando en 10 segundos...', err);
+      this._interstitialRetryTimeout = setTimeout(() => {
+        if (!this.interstitialLoaded) {
+          this._preloadInterstitial();
+        }
+      }, 10000);
     }
   }
 
   async showInterstitial(onClose) {
-    if (!this.initialized || !this.admob) {
+    if (!this.initialized) {
       if (typeof onClose === 'function') onClose();
       return;
     }
 
-    try {
-      if (!this.interstitialLoaded) {
-        await this.admob.prepareInterstitial({
+    if (!this.interstitialLoaded) {
+      console.log('[AdMob Real] Intersticial no precargado en este instante. Intentando preparar...');
+      try {
+        await AdMob.prepareInterstitial({
           adId: AD_CONFIG.interstitialId,
           isTesting: false,
         });
+        this.interstitialLoaded = true;
+      } catch (loadErr) {
+        console.warn('[AdMob Real] No se pudo cargar intersticial en tiempo real:', loadErr);
+        if (typeof onClose === 'function') onClose();
+        this._preloadInterstitial();
+        return;
       }
+    }
 
-      const dismissListener = this.admob.addListener(
-        this.InterstitialAdPluginEvents.Dismissed,
+    try {
+      let handled = false;
+      const finish = () => {
+        if (handled) return;
+        handled = true;
+        this.interstitialLoaded = false;
+        cleanup();
+        setTimeout(() => this._preloadInterstitial(), 2000);
+        if (typeof onClose === 'function') onClose();
+      };
+
+      const dismissSub = AdMob.addListener(
+        InterstitialAdPluginEvents.Dismissed,
         () => {
-          console.log('[AdMob Native] Interstitial cerrado');
-          dismissListener.then(l => l.remove()).catch(() => {});
-          if (typeof onClose === 'function') onClose();
-          this.interstitialLoaded = false;
-          setTimeout(() => this._preloadInterstitial(), 2000);
+          console.log('[AdMob Real] Intersticial cerrado');
+          finish();
         }
       );
 
-      const failListener = this.admob.addListener(
-        this.InterstitialAdPluginEvents.FailedToShow,
+      const failSub = AdMob.addListener(
+        InterstitialAdPluginEvents.FailedToShow,
         (err) => {
-          console.warn('[AdMob Native] Interstitial falló:', err);
-          failListener.then(l => l.remove()).catch(() => {});
-          if (typeof onClose === 'function') onClose();
+          console.warn('[AdMob Real] Interstitial falló al mostrar:', err);
+          cleanup();
           this.interstitialLoaded = false;
+          finish();
           setTimeout(() => this._preloadInterstitial(), 2000);
         }
       );
 
-      await this.admob.showInterstitial();
-      this.interstitialLoaded = false;
+      const cleanup = () => {
+        dismissSub.then(l => l.remove()).catch(() => {});
+        failSub.then(l => l.remove()).catch(() => {});
+      };
+
+      await AdMob.showInterstitial();
     } catch (err) {
-      console.warn('[AdMob Native] Error mostrando interstitial:', err);
-      if (typeof onClose === 'function') onClose();
+      console.warn('[AdMob Real] Error mostrando intersticial:', err);
       this.interstitialLoaded = false;
+      if (typeof onClose === 'function') onClose();
       setTimeout(() => this._preloadInterstitial(), 2000);
     }
   }
 }
 
 // ============================================================================
-// SIMULATED AD MANAGER (Navegador web / Itch.io)
+// SIMULATED AD MANAGER (Únicamente para navegador Web de PC / Itch.io)
 // ============================================================================
 class SimulatedAdManager {
   constructor() {
     this.isMenuScreen = false;
     this.bannerActive = false;
+    this._activeInterval = null;
   }
 
   init() {
-    console.log('[Ads Sim] Modo simulador web activo');
+    console.log('[Ads Web] Entorno web de escritorio detectado (Modo simulador para pruebas locales/itch.io)');
     const closeBannerBtn = document.getElementById('closeSimBanner');
     if (closeBannerBtn) {
-      closeBannerBtn.addEventListener('click', () => this.hideBanner());
+      closeBannerBtn.onclick = () => this.hideBanner();
     }
   }
 
@@ -294,24 +445,43 @@ class SimulatedAdManager {
       return;
     }
 
-    typeLabel.innerText = "Anuncio Recompensado de AdMob";
+    if (this._activeInterval) {
+      clearInterval(this._activeInterval);
+      this._activeInterval = null;
+    }
+
+    typeLabel.innerText = "Simulador Web de Publicidad";
     videoOverlay.classList.add('active');
     skipBtn.classList.add('disabled');
     skipBtn.disabled = true;
     skipBtn.innerText = "Omitir (Sin recompensa)";
     claimBtn.classList.add('disabled');
     claimBtn.disabled = true;
-    claimBtn.innerText = "Cerrar y Revivir";
+    claimBtn.innerText = "Cerrar y Reclamar";
 
     let timeLeft = 5;
     timerLabel.innerText = `${timeLeft}s`;
 
-    const interval = setInterval(() => {
-      timeLeft--;
-      timerLabel.innerText = `${timeLeft}s`;
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      if (this._activeInterval) {
+        clearInterval(this._activeInterval);
+        this._activeInterval = null;
+      }
+      videoOverlay.classList.remove('active');
+      claimBtn.onclick = null;
+      skipBtn.onclick = null;
+    };
 
-      if (timeLeft <= 0) {
-        clearInterval(interval);
+    this._activeInterval = setInterval(() => {
+      timeLeft--;
+      if (timeLeft > 0) {
+        timerLabel.innerText = `${timeLeft}s`;
+      } else {
+        clearInterval(this._activeInterval);
+        this._activeInterval = null;
         timerLabel.innerText = "¡COMPLETO!";
 
         claimBtn.classList.remove('disabled');
@@ -322,24 +492,15 @@ class SimulatedAdManager {
       }
     }, 1000);
 
-    const handleClaim = () => {
+    claimBtn.onclick = () => {
       cleanup();
       if (typeof onReward === 'function') onReward();
     };
 
-    const handleSkip = () => {
+    skipBtn.onclick = () => {
       cleanup();
       if (typeof onClose === 'function') onClose();
     };
-
-    const cleanup = () => {
-      videoOverlay.classList.remove('active');
-      claimBtn.removeEventListener('click', handleClaim);
-      skipBtn.removeEventListener('click', handleSkip);
-    };
-
-    claimBtn.addEventListener('click', handleClaim);
-    skipBtn.addEventListener('click', handleSkip);
   }
 
   showInterstitial(onClose) {
@@ -354,7 +515,12 @@ class SimulatedAdManager {
       return;
     }
 
-    typeLabel.innerText = "Anuncio Intersticial de AdMob";
+    if (this._activeInterval) {
+      clearInterval(this._activeInterval);
+      this._activeInterval = null;
+    }
+
+    typeLabel.innerText = "Simulador Web de Intersticial";
     videoOverlay.classList.add('active');
 
     claimBtn.classList.add('disabled');
@@ -368,12 +534,26 @@ class SimulatedAdManager {
     timerLabel.innerText = `Omitir en ${timeLeft}s`;
     skipBtn.innerText = "Omitir anuncio";
 
-    const interval = setInterval(() => {
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
+      if (this._activeInterval) {
+        clearInterval(this._activeInterval);
+        this._activeInterval = null;
+      }
+      videoOverlay.classList.remove('active');
+      skipBtn.onclick = null;
+      claimBtn.onclick = null;
+    };
+
+    this._activeInterval = setInterval(() => {
       timeLeft--;
       if (timeLeft > 0) {
         timerLabel.innerText = `Omitir en ${timeLeft}s`;
       } else {
-        clearInterval(interval);
+        clearInterval(this._activeInterval);
+        this._activeInterval = null;
         timerLabel.innerText = "Listo";
         skipBtn.classList.remove('disabled');
         skipBtn.disabled = false;
@@ -381,27 +561,29 @@ class SimulatedAdManager {
       }
     }, 1000);
 
-    const handleSkip = () => {
-      videoOverlay.classList.remove('active');
-      skipBtn.removeEventListener('click', handleSkip);
+    skipBtn.onclick = () => {
+      cleanup();
       if (typeof onClose === 'function') onClose();
     };
 
-    skipBtn.addEventListener('click', handleSkip);
+    claimBtn.onclick = () => {
+      cleanup();
+      if (typeof onClose === 'function') onClose();
+    };
   }
 }
 
 // ============================================================================
-// FACTORY: Elegir implementación según plataforma
+// FACTORY: Selección estricta de plataforma
 // ============================================================================
 let ads;
 
 if (isNativeApp) {
-  console.log('[Ads] Detectado entorno nativo (APK). Usando AdMob real optimizado.');
+  console.log('[Ads] Dispositivo nativo (APK). Activando AdMob 100% REAL de producción.');
   ads = new NativeAdManager();
   ads.init();
 } else {
-  console.log('[Ads] Detectado entorno web. Usando simulador.');
+  console.log('[Ads] Navegador web detectado.');
   ads = new SimulatedAdManager();
   ads.init();
 }
